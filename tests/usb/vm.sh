@@ -53,7 +53,7 @@ display_args=(-display none -device virtio-vga)
 
 echo ">> booting $(basename "$ISO") as \"$VM\" with a $stick_size USB stick ($STICK)"
 exec qemu-system-x86_64 \
-    -enable-kvm -machine q35 -cpu host -smp 8 -m 8G \
+    -enable-kvm -machine q35 -cpu host -smp 8 -m 6G \
     -drive if=pflash,format=raw,unit=0,readonly=on,file="$OVMF_DIR/OVMF_CODE.4m.fd" \
     -drive if=pflash,format=raw,unit=1,file="$NVRAM" \
     -drive file="$ISO",media=cdrom,readonly=on -boot order=d \

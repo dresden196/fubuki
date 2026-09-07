@@ -25,7 +25,7 @@ if [[ "$MODE" == "uefi" ]]; then
     fw_args=(-drive if=pflash,format=raw,unit=0,readonly=on,file=/usr/share/edk2/x64/OVMF_CODE.4m.fd
              -drive if=pflash,format=raw,unit=1,file="$VARS")
 fi
-qemu-system-x86_64 -enable-kvm -machine q35 -cpu host -smp 4 -m 4G \
+qemu-system-x86_64 -enable-kvm -machine q35 -cpu host -smp 4 -m "${SAKURA_BOOT_MEM:-3G}" \
     "${fw_args[@]}" \
     -drive file="$STICK",if=none,id=stick,format=raw,file.locking=off$SNAPSHOT \
     -device qemu-xhci,id=xhci -device usb-storage,bus=xhci.0,drive=stick,removable=on \

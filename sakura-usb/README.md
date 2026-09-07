@@ -9,7 +9,7 @@ disk images, the way Rufus does on Windows.
     sudo sakura-usb write -d /dev/sdb -i win11.iso --scheme gpt --target uefi --fs ntfs \
          --windows-option bypass_requirements --windows-option no_online_account
     sudo sakura-usb write -d /dev/sdb -i ubuntu.iso --persistence 4G
-    sudo sakura-usb write -d /dev/sdb -i win11.iso --wintogo 1
+    sudo sakura-usb write -d /dev/sdb -i win11.iso --wintogo 1 --scheme mbr --target dual --fs ntfs
     sudo sakura-usb write -d /dev/sdb -i image.img.xz --mode dd --verify
     sudo sakura-usb write -d /dev/sdb --boot-type freedos
 

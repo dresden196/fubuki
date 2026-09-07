@@ -160,6 +160,12 @@ def run_job(job, emitter, cancel=None):
             j["mode"] = "dd"
         if j["wintogo"] and not report["wininst"]:
             raise UsbError("Windows To Go needs an image with sources/install.wim")
+        if j["wintogo"] and j["scheme"] != "mbr":
+            # Boot files live on the NTFS partition (UEFI:NTFS chains into
+            # them), so there is no ESP; on GPT sysprep then finds no system
+            # partition and specialize fails with 0xC0000452. On MBR the
+            # active partition is the system partition, and that is NTFS.
+            raise UsbError("Windows To Go currently needs the MBR partition scheme (target 'BIOS or UEFI')")
         if j["mode"] == "iso" and report["needs_ntfs"] and j["fs"] in ("fat16", "fat32"):
             raise UsbError("this image has files over 4 GB that cannot be split; use NTFS or exFAT")
         if j["persistence_size"] and not report["supports_persistence"]:

@@ -94,7 +94,9 @@ Windows option names: `bypass_requirements`, `no_online_account`,
 Rules the window should enforce before sending (the engine checks too):
 GPT requires target uefi; `dual` target requires MBR; Windows images with
 a file over 4 GB default to NTFS (FAT32 is allowed, install.wim is split);
-`needs_ntfs` forbids FAT; persistence only when `supports_persistence`.
+`needs_ntfs` forbids FAT; persistence only when `supports_persistence`;
+Windows To Go needs `scheme` mbr with target `dual` (boot files live on the
+NTFS partition, chained through UEFI:NTFS; there is no ESP).
 
 ## Exit / errors
 

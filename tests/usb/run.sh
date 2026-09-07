@@ -108,9 +108,10 @@ if run_scn freedos; then
     scenario freedos --boot-type freedos --scheme mbr --target bios --fs fat32 --label FREEDOS && boot_check freedos bios 20
 fi
 if run_scn wintogo; then
-    scenario wintogo --image "/mnt/isos/$WIN_ISO" --mode iso --wintogo 1 --scheme gpt --target uefi --fs ntfs \
+    scenario wintogo --image "/mnt/isos/$WIN_ISO" --mode iso --wintogo 1 --scheme mbr --target dual --fs ntfs \
         --windows-option offline_internal_drives --windows-option set_user --username tester --windows-option no_online_account && {
-        boot_check wintogo uefi 180
+        boot_check wintogo uefi 240
+        boot_check wintogo bios 240
     }
 fi
 

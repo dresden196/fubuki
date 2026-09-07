@@ -290,6 +290,17 @@ def _patch_bcd(src, dst, loader_path, description="Windows To Go", log=None):
             if n is None:
                 n = h.node_add_child(el, name)
             h.node_set_value(n, {"key": "Element", "t": t, "value": val})
+    # A store sysprep will accept as *the* system store carries these
+    # marks under Description; the DVD's store does not, and specialize
+    # then fails with "File is not system store" (0xC0000098).
+    desc = h.node_get_child(h.root(), "Description")
+    if desc is None:
+        desc = h.node_add_child(h.root(), "Description")
+    vals = {h.value_key(v): dict(key=h.value_key(v), t=h.value_type(v)[0], value=h.value_value(v)[1]) for v in h.node_values(desc)}
+    vals["KeyName"] = {"key": "KeyName", "t": 1, "value": _utf16("BCD00000001")}
+    vals["System"] = {"key": "System", "t": 4, "value": struct.pack("<I", 1)}
+    vals["TreatAsSystem"] = {"key": "TreatAsSystem", "t": 4, "value": struct.pack("<I", 1)}
+    h.node_set_values(desc, list(vals.values()))
     h.commit(None)
     if log:
         log(f"Built {os.path.basename(dst)} for {loader_path}")
