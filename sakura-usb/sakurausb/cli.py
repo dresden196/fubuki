@@ -203,6 +203,9 @@ def cmd_serve(args):
             elif cmd == "quit":
                 if current["cancel"]:
                     current["cancel"].cancel()
+                for t in threads:
+                    if t.is_alive():
+                        t.join()
                 send({"id": rid, "result": "bye"})
                 return 0
             elif cmd == "devices":
@@ -218,6 +221,9 @@ def cmd_serve(args):
                 threads.append(t)
                 t.start()
             elif cmd == "hash":
+                if current["thread"] is not None and current["thread"].is_alive():
+                    send({"id": rid, "error": "a job is already running"})
+                    continue
                 path = req.get("path", "")
                 algs = req.get("algorithms") or list(hashing.ALGORITHMS)
                 em = TaggedEmitter(rid, out)

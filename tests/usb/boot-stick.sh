@@ -4,6 +4,7 @@
 #
 #   tests/usb/boot-stick.sh bios 40 out/shot.png
 #   tests/usb/boot-stick.sh uefi 60 out/shot.png
+#   SAKURA_STICK_PERSIST=1 ...   keep what the guest writes (to read its logs afterwards)
 set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 OUT="$REPO_ROOT/out"
@@ -15,6 +16,8 @@ QMP="$OUT/qmp-stickboot.sock"
 LOG="$OUT/console-stickboot-$MODE.log"
 rm -f "$QMP" "$LOG"
 
+SNAPSHOT=",snapshot=on"
+[[ -n "${SAKURA_STICK_PERSIST:-}" ]] && SNAPSHOT=""
 fw_args=()
 if [[ "$MODE" == "uefi" ]]; then
     VARS="$OUT/OVMF_VARS-stickboot.fd"
@@ -24,7 +27,7 @@ if [[ "$MODE" == "uefi" ]]; then
 fi
 qemu-system-x86_64 -enable-kvm -machine q35 -cpu host -smp 4 -m 4G \
     "${fw_args[@]}" \
-    -drive file="$STICK",if=none,id=stick,format=raw,snapshot=on,file.locking=off \
+    -drive file="$STICK",if=none,id=stick,format=raw,file.locking=off$SNAPSHOT \
     -device qemu-xhci,id=xhci -device usb-storage,bus=xhci.0,drive=stick,removable=on \
     -boot menu=off \
     -netdev user,id=net0 -device e1000,netdev=net0 \

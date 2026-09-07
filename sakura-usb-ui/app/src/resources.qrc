@@ -1,0 +1,8 @@
+<RCC>
+  <qresource prefix="/">
+    <file>qml/Main.qml</file>
+    <file>qml/WindowsOptionsDialog.qml</file>
+    <file>qml/ChecksumDialog.qml</file>
+    <file>qml/ConfirmDialog.qml</file>
+  </qresource>
+</RCC>
