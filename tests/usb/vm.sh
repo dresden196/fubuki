@@ -45,7 +45,9 @@ mkdir -p "$OUT"
 if (( reset )); then rm -f "$STICK" "$SCRATCH" "$NVRAM"; fi
 [[ -f "$STICK" ]] || truncate -s "$stick_size" "$STICK"
 [[ -f "$SCRATCH" ]] || qemu-img create -f qcow2 "$SCRATCH" 40G >/dev/null
-[[ -f "$NVRAM" ]] || cp "$OVMF_DIR/OVMF_VARS.4m.fd" "$NVRAM"
+# Fresh firmware variables every boot: once a scenario has made the stick
+# bootable, a remembered boot order would start the stick instead of the ISO.
+cp "$OVMF_DIR/OVMF_VARS.4m.fd" "$NVRAM"
 rm -f "$QMP_SOCK" "$QGA_SOCK"
 
 display_args=(-display none -device virtio-vga)
@@ -53,10 +55,11 @@ display_args=(-display none -device virtio-vga)
 
 echo ">> booting $(basename "$ISO") as \"$VM\" with a $stick_size USB stick ($STICK)"
 exec qemu-system-x86_64 \
-    -enable-kvm -machine q35 -cpu host -smp 8 -m 6G \
+    -enable-kvm -machine q35 -cpu host -smp 6 -m 4G \
     -drive if=pflash,format=raw,unit=0,readonly=on,file="$OVMF_DIR/OVMF_CODE.4m.fd" \
     -drive if=pflash,format=raw,unit=1,file="$NVRAM" \
-    -drive file="$ISO",media=cdrom,readonly=on -boot order=d \
+    -drive file="$ISO",media=cdrom,readonly=on,if=none,id=cd0 \
+    -device ide-cd,drive=cd0,bootindex=0 \
     -drive file="$SCRATCH",if=virtio,format=qcow2 \
     -drive file="$STICK",if=none,id=stick,format=raw,cache=writeback \
     -device qemu-xhci,id=xhci \

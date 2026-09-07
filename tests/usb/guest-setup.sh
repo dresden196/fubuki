@@ -25,7 +25,11 @@ fi
 missing=""
 for p in wimlib hivex python-pyudev; do pacman -Q $p >/dev/null 2>&1 || missing="$missing $p"; done
 if [ -n "$missing" ]; then
-    for i in 1 2 3; do pacman -Sy --noconfirm --needed $missing && break; sleep 5; done
+    # Everything needed is in the Arch repos. The live image also lists the
+    # sakura-core repo, whose signing key may not be in the keyring yet this
+    # early in the boot, and one unusable repo makes -Sy fail as a whole.
+    sed "/\\[sakura-core\\]/,/^$/d" /etc/pacman.conf > /tmp/pacman-arch.conf
+    for i in 1 2 3; do pacman --config /tmp/pacman-arch.conf -Sy --noconfirm --needed $missing && break; sleep 5; done
 fi
 lsblk -o NAME,SIZE,TRAN,RM,MODEL | grep -E "NAME|sd"
 echo "guest ready"
