@@ -171,7 +171,7 @@ def build(arch, options, username="", edition_index=1, ui_language="en-US", log=
             # (see Rufus #2960): a safety net against wiping the wrong disk.
             L += ['        <Disk wcm:action="modify">', "          <DiskID>1</DiskID>", "          <ModifyPartitions>",
                   '            <ModifyPartition wcm:action="modify">', "              <Order>1</Order>",
-                  "              <PartitionID>2</PartitionID>", "              <Label>SAKURA_BOOT</Label>",
+                  "              <PartitionID>2</PartitionID>", "              <Label>FUBUKI_BOOT</Label>",
                   "            </ModifyPartition>", "          </ModifyPartitions>", "        </Disk>",
                   '        <Disk wcm:action="add">', "          <DiskID>0</DiskID>", "          <WillWipeDisk>true</WillWipeDisk>",
                   "          <CreatePartitions>",

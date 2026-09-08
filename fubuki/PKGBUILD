@@ -1,12 +1,12 @@
 # Maintainer: SakuraOS <dev@sakuraos.invalid>
 #
 # The USB writer engine. Everything that touches a disk is here; the window
-# (sakura-usb-ui) only draws what this reports and hands it a job.
+# (fubuki-ui) only draws what this reports and hands it a job.
 #
 # The design and the boot payloads come from Rufus (GPLv3, Pete Batard):
 # uefi-ntfs.img, FreeDOS, the Windows 11 24H2 setup wrapper, and the boot
-# sector code ported from ms-sys. See sakurausb/bootcode.py and payload/.
-pkgname=sakura-usb
+# sector code ported from ms-sys. See fubuki/bootcode.py and payload/.
+pkgname=fubuki
 pkgver=0.1.0
 pkgrel=1
 pkgdesc="SakuraOS bootable USB writer engine"
@@ -25,18 +25,17 @@ depends=('python' 'python-pyudev' 'util-linux' 'dosfstools' 'ntfs-3g' 'exfatprog
          'parted'
          'polkit')
 optdepends=('zstd: writing .zst compressed images')
-source=('sakura-usb'
-        'org.sakuraos.usb.policy')
-sha256sums=('SKIP' 'SKIP')
+source=('org.sakuraos.fubuki.policy')
+sha256sums=('SKIP')
 
 package() {
-    install -Dm755 "$srcdir/sakura-usb" "$pkgdir/usr/bin/sakura-usb"
-    install -d "$pkgdir/usr/lib/sakura/usb/sakurausb"
-    install -Dm644 "$startdir"/sakurausb/*.py -t "$pkgdir/usr/lib/sakura/usb/sakurausb/"
-    install -d "$pkgdir/usr/share/sakura-usb"
-    cp -r "$startdir/payload/." "$pkgdir/usr/share/sakura-usb/"
-    find "$pkgdir/usr/share/sakura-usb" -type f -exec chmod 644 {} +
-    install -Dm644 "$srcdir/org.sakuraos.usb.policy" \
-        "$pkgdir/usr/share/polkit-1/actions/org.sakuraos.usb.policy"
-    install -Dm644 "$startdir/PROTOCOL.md" "$pkgdir/usr/share/doc/sakura-usb/PROTOCOL.md"
+    install -Dm755 "$startdir/bin/fubuki" "$pkgdir/usr/bin/fubuki"
+    install -d "$pkgdir/usr/lib/sakura/fubuki/fubuki"
+    install -Dm644 "$startdir"/fubuki/*.py -t "$pkgdir/usr/lib/sakura/fubuki/fubuki/"
+    install -d "$pkgdir/usr/share/fubuki"
+    cp -r "$startdir/payload/." "$pkgdir/usr/share/fubuki/"
+    find "$pkgdir/usr/share/fubuki" -type f -exec chmod 644 {} +
+    install -Dm644 "$srcdir/org.sakuraos.fubuki.policy" \
+        "$pkgdir/usr/share/polkit-1/actions/org.sakuraos.fubuki.policy"
+    install -Dm644 "$startdir/PROTOCOL.md" "$pkgdir/usr/share/doc/fubuki/PROTOCOL.md"
 }

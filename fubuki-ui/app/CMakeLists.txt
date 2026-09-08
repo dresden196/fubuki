@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(sakura-usb-ui VERSION 0.1.0)
+project(fubuki-ui VERSION 0.1.0)
 
 find_package(ECM 6.0 REQUIRED NO_MODULE)
 set(CMAKE_MODULE_PATH ${ECM_MODULE_PATH})

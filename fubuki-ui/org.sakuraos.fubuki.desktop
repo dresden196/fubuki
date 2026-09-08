@@ -1,10 +1,10 @@
 [Desktop Entry]
 Type=Application
-Name=Sakura USB Writer
+Name=Fubuki
 GenericName=Bootable USB Creator
 Comment=Write bootable USB drives from ISO and disk images
-Exec=sakura-usb-ui %f
-Icon=sakura-usb
+Exec=fubuki-ui %f
+Icon=fubuki
 Terminal=false
 Categories=System;Utility;
 Keywords=usb;iso;bootable;flash;write;rufus;image;

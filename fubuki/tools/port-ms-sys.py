@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regenerate sakurausb/bootcode.py from a Rufus checkout's src/ms-sys/inc.
+"""Regenerate fubuki/bootcode.py from a Rufus checkout's src/ms-sys/inc.
 
     tools/port-ms-sys.py ~/src/rufus/src/ms-sys/inc
 """
@@ -29,6 +29,6 @@ for name in WANTED:
         for i in range(0, len(vals), 12):
             out.append("    " + ", ".join(f"0x{v:02x}" for v in vals[i:i + 12]) + ",")
         out += ["])", f"assert len({ident}) == {len(vals)}", ""]
-dest = pathlib.Path(__file__).resolve().parent.parent / "sakurausb" / "bootcode.py"
+dest = pathlib.Path(__file__).resolve().parent.parent / "fubuki" / "bootcode.py"
 dest.write_text("\n".join(out) + "\n")
 print("wrote", dest)

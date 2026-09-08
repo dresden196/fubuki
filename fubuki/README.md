@@ -1,19 +1,19 @@
-# sakura-usb
+# fubuki
 
-The engine behind Sakura USB Writer: makes bootable USB drives from ISO and
+The engine behind Fubuki: makes bootable USB drives from ISO and
 disk images, the way Rufus does on Windows.
 
-    sakura-usb devices                       # drives it is willing to write
-    sakura-usb probe some.iso                # what the image is and how it boots
-    sudo sakura-usb write -d /dev/sdb -i some.iso            # defaults from the probe
-    sudo sakura-usb write -d /dev/sdb -i win11.iso --scheme gpt --target uefi --fs ntfs \
+    fubuki devices                       # drives it is willing to write
+    fubuki probe some.iso                # what the image is and how it boots
+    sudo fubuki write -d /dev/sdb -i some.iso            # defaults from the probe
+    sudo fubuki write -d /dev/sdb -i win11.iso --scheme gpt --target uefi --fs ntfs \
          --windows-option bypass_requirements --windows-option no_online_account
-    sudo sakura-usb write -d /dev/sdb -i ubuntu.iso --persistence 4G
-    sudo sakura-usb write -d /dev/sdb -i win11.iso --wintogo 1 --scheme mbr --target dual --fs ntfs
-    sudo sakura-usb write -d /dev/sdb -i image.img.xz --mode dd --verify
-    sudo sakura-usb write -d /dev/sdb --boot-type freedos
+    sudo fubuki write -d /dev/sdb -i ubuntu.iso --persistence 4G
+    sudo fubuki write -d /dev/sdb -i win11.iso --wintogo 1 --scheme mbr --target dual --fs ntfs
+    sudo fubuki write -d /dev/sdb -i image.img.xz --mode dd --verify
+    sudo fubuki write -d /dev/sdb --boot-type freedos
 
-The window (`sakura-usb-ui`) runs `sakura-usb serve` under pkexec and talks
+The window (`fubuki-ui`) runs `fubuki serve` under pkexec and talks
 the protocol in `PROTOCOL.md`.
 
 ## What it does that a plain `dd` cannot

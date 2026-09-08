@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Boot the SakuraOS live ISO in QEMU with an emulated USB stick, for testing
-# sakura-usb end to end without touching a real drive.
+# fubuki end to end without touching a real drive.
 #
 # The guest sees: a removable USB mass-storage device backed by
 # out/usb-stick.img (raw), the repository at /mnt/repo (9p, read-only), the

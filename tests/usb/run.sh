@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Drive sakura-usb through its paces inside the test VM, then boot what it
+# Drive fubuki through its paces inside the test VM, then boot what it
 # made. Each scenario writes the emulated stick, then the stick image is
 # booted on the host under BIOS and/or UEFI and a screenshot is taken.
 #
@@ -21,9 +21,9 @@ engine() {
     # $1 = extra args for `write`; runs as root in the guest, JSON progress
     # reduced to the log lines and the final result.
     SAKURA_GUEST_TIMEOUT=3600 "$RUN" "
-        cd /mnt/repo/packages/sakura-usb &&
-        PYTHONDONTWRITEBYTECODE=1 SAKURA_USB_PAYLOAD=/mnt/repo/packages/sakura-usb/payload TMPDIR=/var/tmp/sakura \
-        python3 -m sakurausb --json write --yes --temp-dir /var/tmp/sakura $1 2>&1 |
+        cd /mnt/repo/packages/fubuki &&
+        PYTHONDONTWRITEBYTECODE=1 FUBUKI_PAYLOAD=/mnt/repo/packages/fubuki/payload TMPDIR=/var/tmp/sakura \
+        python3 -m fubuki --json write --yes --temp-dir /var/tmp/sakura $1 2>&1 |
         python3 -c 'import sys,json
 for l in sys.stdin:
     try: e=json.loads(l)

@@ -128,7 +128,7 @@ def apply_customization(mount_dir, report, options, username="", edition_index=1
     need_wim = (winpe or ua.USE_MS2023_BOOTLOADERS in options) and boot_wim is not None
     wim_index = 2
     commands = []
-    tmp = tempfile.mkdtemp(prefix="sakura-usb-wue-", dir=temp_dir)
+    tmp = tempfile.mkdtemp(prefix="fubuki-wue-", dir=temp_dir)
     try:
         if need_wim:
             count = wimmod.image_count(boot_wim)
@@ -223,7 +223,7 @@ def setup_win7_efi(mount_dir, wininst_path_on_target, log=None, cancel=None):
     pull bootmgfw.efi out of install.wim."""
     dst_dir = os.path.join(mount_dir, "efi", "boot")
     os.makedirs(dst_dir, exist_ok=True)
-    tmp = tempfile.mkdtemp(prefix="sakura-usb-w7-")
+    tmp = tempfile.mkdtemp(prefix="fubuki-w7-")
     try:
         wimmod.extract_paths(wininst_path_on_target, 1, ["/Windows/Boot/EFI/bootmgfw.efi"], tmp, cancel=cancel)
         shutil.copyfile(os.path.join(tmp, "bootmgfw.efi"), os.path.join(dst_dir, "bootx64.efi"))
@@ -357,7 +357,7 @@ def setup_windows_to_go(reader, report, wim_temp, index, main_dev, mount_dir, ta
     if not win:
         raise UsbError("applied image has no Windows directory")
     boot_src = _find(win, "Boot")
-    tmp = tempfile.mkdtemp(prefix="sakura-usb-wtg-", dir=temp_dir)
+    tmp = tempfile.mkdtemp(prefix="fubuki-wtg-", dir=temp_dir)
     try:
         if target in ("uefi", "dual"):
             efi_dir = os.path.join(mount_dir, "EFI")

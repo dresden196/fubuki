@@ -214,7 +214,7 @@ def write_at(dev, offset, data):
 
 def payload_dir():
     from . import DEFAULT_PAYLOAD_DIR
-    return os.environ.get("SAKURA_USB_PAYLOAD", DEFAULT_PAYLOAD_DIR)
+    return os.environ.get("FUBUKI_PAYLOAD", DEFAULT_PAYLOAD_DIR)
 
 
 def payload_path(*parts):

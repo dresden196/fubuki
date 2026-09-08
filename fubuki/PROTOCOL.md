@@ -1,13 +1,13 @@
-# sakura-usb engine protocol
+# fubuki engine protocol
 
-The window runs the engine as `pkexec /usr/bin/sakura-usb serve` (root is
+The window runs the engine as `pkexec /usr/bin/fubuki serve` (root is
 needed to write a drive) and talks JSON, one object per line, over its
 stdin/stdout. Unprivileged commands (`devices`, `probe`, `hash`) also work
-without pkexec: `sakura-usb serve` as the user.
+without pkexec: `fubuki serve` as the user.
 
 On start the engine prints one line:
 
-    {"event":"hello","app":"Sakura USB Writer","version":"0.1.0","root":true,
+    {"event":"hello","app":"Fubuki","version":"0.1.0","root":true,
      "windows_options":[...all option names...],"windows_defaults":[...]}
 
 ## Requests

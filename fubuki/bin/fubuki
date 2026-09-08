@@ -1,0 +1,9 @@
+#!/usr/bin/python3
+"""Launcher: the engine lives in /usr/lib/sakura/fubuki."""
+import os
+import sys
+
+lib = os.environ.get("FUBUKI_LIB", "/usr/lib/sakura/fubuki")
+sys.path.insert(0, lib)
+from fubuki.cli import main  # noqa: E402
+sys.exit(main())

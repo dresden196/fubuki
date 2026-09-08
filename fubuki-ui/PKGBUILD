@@ -1,17 +1,17 @@
 # Maintainer: SakuraOS <dev@sakuraos.invalid>
 #
 # The USB writer's window. Everything that looks at a disk or an image and
-# every decision about what will boot lives in sakura-usb; this draws what
+# every decision about what will boot lives in fubuki; this draws what
 # the engine reports and hands it a job. A second opinion here would be the
 # one people believed, and the one nobody tested.
-pkgname=sakura-usb-ui
+pkgname=fubuki-ui
 pkgver=0.1.0
 pkgrel=1
-pkgdesc="Sakura USB Writer"
+pkgdesc="Fubuki"
 arch=('x86_64')
 url="https://sakuraos.org"
 license=('GPL-3.0-or-later')
-depends=('sakura-usb' 'qt6-base' 'qt6-declarative' 'kirigami' 'ki18n'
+depends=('fubuki' 'qt6-base' 'qt6-declarative' 'kirigami' 'ki18n'
          'qqc2-desktop-style' 'polkit' 'systemd')
 makedepends=('cmake' 'extra-cmake-modules' 'qt6-tools')
 
@@ -25,9 +25,9 @@ build() {
 package() {
     # The app mark also lives in the Sakura icon themes; hicolor carries it so
     # the entry has an icon under any theme.
-    install -Dm644 "$startdir/icons/sakura-usb.svg" \
-        "$pkgdir/usr/share/icons/hicolor/scalable/apps/sakura-usb.svg"
+    install -Dm644 "$startdir/icons/fubuki.svg" \
+        "$pkgdir/usr/share/icons/hicolor/scalable/apps/fubuki.svg"
     DESTDIR="$pkgdir" cmake --install "$srcdir/build"
-    install -Dm644 "$startdir/org.sakuraos.usb.desktop" \
-        "$pkgdir/usr/share/applications/org.sakuraos.usb.desktop"
+    install -Dm644 "$startdir/org.sakuraos.fubuki.desktop" \
+        "$pkgdir/usr/share/applications/org.sakuraos.fubuki.desktop"
 }

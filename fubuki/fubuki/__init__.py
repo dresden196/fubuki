@@ -1,6 +1,6 @@
 """SakuraOS USB writer engine.
 
-Everything that touches a disk lives here. The window (sakura-usb-ui) only
+Everything that touches a disk lives here. The window (fubuki-ui) only
 draws what this package reports and hands it a job to run.
 
 The design and most of the domain knowledge come from Rufus
@@ -12,7 +12,7 @@ parts of Rufus that fight drive letters and VDS have no equivalent here.
 """
 
 __version__ = "0.1.0"
-APP_NAME = "Sakura USB Writer"
+APP_NAME = "Fubuki"
 # Where the payload (uefi-ntfs.img, FreeDOS, the setup wrapper) is installed.
-# Overridden by SAKURA_USB_PAYLOAD for running from the source tree.
-DEFAULT_PAYLOAD_DIR = "/usr/share/sakura-usb"
+# Overridden by FUBUKI_PAYLOAD for running from the source tree.
+DEFAULT_PAYLOAD_DIR = "/usr/share/fubuki"

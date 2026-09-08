@@ -15,7 +15,7 @@
     auth_admin_keep: making two sticks in a row should not mean typing the
     password twice. The window starts the service once and keeps it.
   -->
-  <action id="org.sakuraos.usb.write">
+  <action id="org.sakuraos.fubuki.write">
     <description>Write a bootable USB drive</description>
     <message>Authentication is required to write a USB drive</message>
     <defaults>
@@ -23,7 +23,7 @@
       <allow_inactive>auth_admin</allow_inactive>
       <allow_active>auth_admin_keep</allow_active>
     </defaults>
-    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/sakura-usb</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/fubuki</annotate>
     <annotate key="org.freedesktop.policykit.exec.allow_gui">true</annotate>
   </action>
 </policyconfig>

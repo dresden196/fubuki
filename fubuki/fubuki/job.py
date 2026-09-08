@@ -26,7 +26,7 @@ PROTECTIVE_MESSAGE = (
     "             \x70\xba   \x74ERROR: BIOS/LEGACY BOOT OF UEFI-ONLY MEDIA\x70   \xba \x07\r\n"
     "             \x70\xba" + " " * 48 + "\xba \x07\r\n"
     "             \x70\xc8" + "\xcd" * 48 + "\xbc \x07\r\n\r\n"
-    "             This drive was created by Sakura USB Writer.\r\n\r\n"
+    "             This drive was created by Fubuki.\r\n\r\n"
     "             It can boot in \x04UEFI mode only\x07 but you are trying to\r\n"
     "             boot it in BIOS/Legacy mode. THIS WILL NOT WORK!\r\n\r\n"
     "             To remove this message you need to do \x02ONE\x07 of the following:\r\n"
@@ -251,7 +251,7 @@ def run_job(job, emitter, cancel=None):
                     write_at(p.device, 0, f.read())
                 # The image comes labelled RUFUS_BOOT; the silent-install answer
                 # file refers to this partition by label, so keep both in step.
-                fsmod.set_label(p.device, "fat32", "SAKURA_BOOT")
+                fsmod.set_label(p.device, "fat32", "FUBUKI_BOOT")
 
             # ---- format
             prog.phase("format", "Formatting...")
@@ -424,7 +424,7 @@ def _bad_blocks(dev, passes, prog, cancel, log):
 def _windows_to_go(j, report, main, main_mount, prog, cancel, log):
     """Extract install.wim to temp space, apply, install boot files."""
     inst = report["wininst"][0]
-    tmpdir = tempfile.mkdtemp(prefix="sakura-usb-wtg-", dir=j["temp_dir"])
+    tmpdir = tempfile.mkdtemp(prefix="fubuki-wtg-", dir=j["temp_dir"])
     try:
         free = shutil.disk_usage(tmpdir).free
         if free < inst["size"] + 64 * MB:

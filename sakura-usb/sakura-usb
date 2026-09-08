@@ -1,9 +1,0 @@
-#!/usr/bin/python3
-"""Launcher: the engine lives in /usr/lib/sakura/usb."""
-import os
-import sys
-
-lib = os.environ.get("SAKURA_USB_LIB", "/usr/lib/sakura/usb")
-sys.path.insert(0, lib)
-from sakurausb.cli import main  # noqa: E402
-sys.exit(main())

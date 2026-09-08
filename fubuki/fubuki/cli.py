@@ -268,7 +268,7 @@ def cmd_serve(args):
 
 
 def main(argv=None):
-    p = argparse.ArgumentParser(prog="sakura-usb", description=f"{APP_NAME} {__version__}")
+    p = argparse.ArgumentParser(prog="fubuki", description=f"{APP_NAME} {__version__}")
     p.add_argument("--json", action="store_true", help="machine-readable output")
     p.add_argument("--compact", action="store_true", help="single-line JSON")
     sub = p.add_subparsers(dest="command", required=True)

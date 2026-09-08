@@ -13,7 +13,7 @@ import time
 from .util import run, UsbError
 
 RULES_DIR = "/run/udev/rules.d"
-MOUNT_BASE = "/run/sakura-usb"
+MOUNT_BASE = "/run/fubuki"
 
 
 def _reload_udev(dev):
@@ -29,7 +29,7 @@ class Inhibit:
     def __init__(self, dev):
         self.dev = dev
         name = os.path.basename(os.path.realpath(dev))
-        self.rule = os.path.join(RULES_DIR, f"89-sakura-usb-{name}.rules")
+        self.rule = os.path.join(RULES_DIR, f"89-fubuki-{name}.rules")
         self.name = name
 
     def __enter__(self):

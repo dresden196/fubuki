@@ -1,12 +1,13 @@
-# Sakura USB Writer
+# Fubuki
 
-A bootable-USB writer for SakuraOS, doing on Linux what Rufus does on
-Windows: Windows install media on NTFS with UEFI:NTFS, the Windows 11
-hardware-check bypass and answer files, Windows To Go, Linux ISOs with
-persistence, FreeDOS, and plain DD writes with verification.
+桜吹雪, *sakura fubuki*: a blizzard of cherry petals. Fubuki is the SakuraOS
+bootable-USB writer, doing on Linux what Rufus does on Windows: Windows
+install media on NTFS with UEFI:NTFS, the Windows 11 hardware-check bypass
+and answer files, Windows To Go, Linux ISOs with persistence, FreeDOS, and
+plain DD writes with verification.
 
-- `sakura-usb/` — the engine (Python) and its package. See its README and `PROTOCOL.md`.
-- `sakura-usb-ui/` — the Qt/QML window (KDE Plasma).
+- `fubuki/` — the engine (Python) and its package. See its README and `PROTOCOL.md`.
+- `fubuki-ui/` — the Qt/QML window (KDE Plasma).
 - `tests/usb/` — the QEMU bench: a live guest with an emulated USB stick, and
   BIOS/UEFI boot checks of what was written.
 

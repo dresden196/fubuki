@@ -194,7 +194,7 @@ def _split_wim(reader, e, target, temp_dir, progress, cancel, log, emitter):
     """install.wim > 4 GB on FAT32: extract to a temp file, wimsplit into
     install.swm + install2.swm..., move the parts in. Windows Setup finds
     them on its own."""
-    tmpdir = tempfile.mkdtemp(prefix="sakura-usb-", dir=temp_dir)
+    tmpdir = tempfile.mkdtemp(prefix="fubuki-", dir=temp_dir)
     try:
         free = shutil.disk_usage(tmpdir).free
         if free < e.size + 64 * MB:
