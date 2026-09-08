@@ -95,8 +95,9 @@ Rules the window should enforce before sending (the engine checks too):
 GPT requires target uefi; `dual` target requires MBR; Windows images with
 a file over 4 GB default to NTFS (FAT32 is allowed, install.wim is split);
 `needs_ntfs` forbids FAT; persistence only when `supports_persistence`;
-Windows To Go needs `scheme` mbr with target `dual` (boot files live on the
-NTFS partition, chained through UEFI:NTFS; there is no ESP).
+Windows To Go needs `fs` ntfs. On MBR the boot files live on the NTFS
+partition and UEFI:NTFS chains into them; on GPT the engine adds an ESP and
+an MSR and the store names partitions by GUID, like bcdboot.
 
 ## Exit / errors
 

@@ -24,6 +24,15 @@ EL_BOOTMENUPOLICY = "250000c2"
 BOOT_DEVICE_BLOB = bytes(16) + struct.pack("<III", 5, 0, 0x48) + bytes(88 - 28)
 
 
+def gpt_partition_device(partition_guid, disk_guid):
+    """The 88-byte BCD device element for a GPT partition, as bcdboot writes
+    it: type 6, then the partition GUID, eight zero bytes (partition style
+    0 = GPT), the disk GUID. Read off a Windows-installed disk's own store."""
+    import uuid
+    return (bytes(16) + struct.pack("<IIII", 6, 0, 0x48, 0)
+            + uuid.UUID(partition_guid).bytes_le + bytes(8) + uuid.UUID(disk_guid).bytes_le + bytes(16))
+
+
 def pe_machine(path):
     with open(path, "rb") as f:
         head = f.read(0x40)
@@ -239,9 +248,12 @@ def _utf16(s):
     return s.encode("utf-16-le") + b"\x00\x00"
 
 
-def _patch_bcd(src, dst, loader_path, description="Windows To Go", log=None):
+def _patch_bcd(src, dst, loader_path, description="Windows To Go", log=None,
+               os_device=BOOT_DEVICE_BLOB, bootmgr_device=None):
     """Turn the install media's BCD (which boots WinPE from a ramdisk) into a
-    store that boots \\Windows from the partition the boot manager came from."""
+    store that boots \\Windows. With no ESP the OS device is "boot", the
+    partition the boot manager came from; with an ESP it is the Windows
+    partition itself and the boot manager's device is the ESP."""
     import hivex
     shutil.copyfile(src, dst)
     h = hivex.Hivex(dst, write=True)
@@ -261,8 +273,8 @@ def _patch_bcd(src, dst, loader_path, description="Windows To Go", log=None):
     for o in loaders:
         el = h.node_get_child(o, "Elements")
         wanted = {
-            EL_DEVICE: (3, BOOT_DEVICE_BLOB),
-            EL_OSDEVICE: (3, BOOT_DEVICE_BLOB),
+            EL_DEVICE: (3, os_device),
+            EL_OSDEVICE: (3, os_device),
             EL_PATH: (1, _utf16(loader_path)),
             EL_SYSTEMROOT: (1, _utf16("\\Windows")),
             EL_DESCRIPTION: (1, _utf16(description)),
@@ -284,8 +296,11 @@ def _patch_bcd(src, dst, loader_path, description="Windows To Go", log=None):
     if bm is not None:
         el = h.node_get_child(bm, "Elements")
         guid = h.node_name(loaders[0])
-        for name, (t, val) in {EL_DEFAULT: (1, _utf16(guid)), EL_DISPLAYORDER: (7, _utf16(guid) + b"\x00\x00"),
-                               EL_TIMEOUT: (3, struct.pack("<Q", 0))}.items():
+        bm_wanted = {EL_DEFAULT: (1, _utf16(guid)), EL_DISPLAYORDER: (7, _utf16(guid) + b"\x00\x00"),
+                     EL_TIMEOUT: (3, struct.pack("<Q", 0))}
+        if bootmgr_device is not None:
+            bm_wanted[EL_DEVICE] = (3, bootmgr_device)
+        for name, (t, val) in bm_wanted.items():
             n = h.node_get_child(el, name)
             if n is None:
                 n = h.node_add_child(el, name)
@@ -337,14 +352,16 @@ def _set_san_policy(system_hive, log=None):
 
 
 def setup_windows_to_go(reader, report, wim_temp, index, main_dev, mount_dir, target, iso_bcd_paths,
-                        options, log=None, emitter=None, cancel=None, temp_dir=None):
+                        options, log=None, emitter=None, cancel=None, temp_dir=None, esp=None):
     """Apply install.wim[index] to the NTFS partition and make it boot.
 
     wim_temp: path of install.wim/.esd already extracted to temporary space.
     target: 'bios' | 'uefi' | 'dual'.
-    Boot files live on the NTFS partition itself; on UEFI, UEFI:NTFS chains
-    into them, which is Rufus's layout when no ESP is used. The BCD's device
-    is then simply "boot", the partition the boot manager was read from.
+    Without `esp`, boot files live on the NTFS partition itself and UEFI:NTFS
+    chains into them (Rufus's no-ESP layout, MBR only): the BCD's device is
+    "boot". With `esp` = {"device", "mount", "partition_guid", "disk_guid",
+    "main_partition_guid"} (GPT), the EFI files and BCD go on the ESP and the
+    store names the partitions by GUID, like bcdboot does.
     """
     if emitter:
         emitter.status("Applying Windows image (this takes a while)...")
@@ -360,7 +377,8 @@ def setup_windows_to_go(reader, report, wim_temp, index, main_dev, mount_dir, ta
     tmp = tempfile.mkdtemp(prefix="fubuki-wtg-", dir=temp_dir)
     try:
         if target in ("uefi", "dual"):
-            efi_dir = os.path.join(mount_dir, "EFI")
+            efi_root = esp["mount"] if esp else mount_dir
+            efi_dir = os.path.join(efi_root, "EFI")
             ms_boot = os.path.join(efi_dir, "Microsoft", "Boot")
             os.makedirs(os.path.join(efi_dir, "Boot"), exist_ok=True)
             os.makedirs(ms_boot, exist_ok=True)
@@ -379,9 +397,16 @@ def setup_windows_to_go(reader, report, wim_temp, index, main_dev, mount_dir, ta
             res = _find(boot_src, "Resources")
             if res:
                 shutil.copytree(res, os.path.join(ms_boot, "Resources"), dirs_exist_ok=True)
-            _patch_bcd(iso_bcd_paths["efi"], os.path.join(ms_boot, "BCD"), "\\Windows\\system32\\winload.efi", log=log)
-            if log:
-                log("Installed EFI boot files on the Windows partition")
+            if esp:
+                _patch_bcd(iso_bcd_paths["efi"], os.path.join(ms_boot, "BCD"), "\\Windows\\system32\\winload.efi", log=log,
+                           os_device=gpt_partition_device(esp["main_partition_guid"], esp["disk_guid"]),
+                           bootmgr_device=gpt_partition_device(esp["partition_guid"], esp["disk_guid"]))
+                if log:
+                    log("Installed EFI boot files on the EFI System Partition")
+            else:
+                _patch_bcd(iso_bcd_paths["efi"], os.path.join(ms_boot, "BCD"), "\\Windows\\system32\\winload.efi", log=log)
+                if log:
+                    log("Installed EFI boot files on the Windows partition")
         if target in ("bios", "dual"):
             pcat = _find(boot_src, "PCAT") if boot_src else None
             if pcat and _find(pcat, "bootmgr"):

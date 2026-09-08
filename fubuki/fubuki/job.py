@@ -162,12 +162,8 @@ def run_job(job, emitter, cancel=None):
             j["mode"] = "dd"
         if j["wintogo"] and not report["wininst"]:
             raise UsbError("Windows To Go needs an image with sources/install.wim")
-        if j["wintogo"] and j["scheme"] != "mbr":
-            # Boot files live on the NTFS partition (UEFI:NTFS chains into
-            # them), so there is no ESP; on GPT sysprep then finds no system
-            # partition and specialize fails with 0xC0000452. On MBR the
-            # active partition is the system partition, and that is NTFS.
-            raise UsbError("Windows To Go currently needs the MBR partition scheme (target 'BIOS or UEFI')")
+        if j["wintogo"] and j["fs"] != "ntfs":
+            raise UsbError("Windows To Go needs NTFS")
         if j["mode"] == "iso" and report["needs_ntfs"] and j["fs"] in ("fat16", "fat32"):
             raise UsbError("this image has files over 4 GB that cannot be split; use NTFS or exFAT")
         if j["persistence_size"] and not report["supports_persistence"]:
@@ -187,7 +183,14 @@ def run_job(job, emitter, cancel=None):
     if not dd_mode:
         if j["persistence_size"]:
             extras.add("persistence")
-        if (j["boot_type"] == "image" and efi_bootable and j["fs"] in ("ntfs", "exfat")) or j["boot_type"] == "uefi_ntfs":
+        wintogo_esp = j["boot_type"] == "image" and j["wintogo"] and j["scheme"] == "gpt"
+        if wintogo_esp:
+            # Windows running from GPT wants a real ESP (its system partition;
+            # without one sysprep fails 0xC0000452) and, per Microsoft, an MSR.
+            # On MBR the active NTFS partition is the system partition and
+            # UEFI:NTFS chains into it instead.
+            extras.update({"esp", "msr"})
+        elif (j["boot_type"] == "image" and efi_bootable and j["fs"] in ("ntfs", "exfat")) or j["boot_type"] == "uefi_ntfs":
             extras.add("uefi_ntfs")
             if j["boot_type"] == "image" and report["has_bootmgr"] and not j["wintogo"] and j["target"] == "bios":
                 extras.discard("uefi_ntfs")
@@ -263,6 +266,10 @@ def run_job(job, emitter, cancel=None):
                 log(f"Using {'Ubuntu' if kind == 'casper' else 'Debian'}-like method to enable persistence")
                 fsmod.mkfs(p.device, "ext4", "casper-rw" if kind == "casper" else "persistence", quick=True, log=log, cancel=cancel)
                 linux.setup_persistence(p.device, kind, mountctl.mount_dir_for(dev, "persist"), log)
+            if "esp" in by_role:
+                # No label on purpose: a labelled ESP has cost people hours (Rufus's words).
+                fsmod.mkfs(by_role["esp"].device, "fat32", "", cluster_size=1024 if sector <= 1024 else 4096,
+                           quick=True, sector_size=sector, log=log, cancel=cancel)
             label = j["label"] or (report["label"] if report else "") or ""
             if j["fs"] not in ("ext2", "ext3", "ext4"):
                 label = fsmod.valid_label(label, j["fs"], disk_size)
@@ -303,7 +310,21 @@ def run_job(job, emitter, cancel=None):
             main_mount = mountctl.mount_dir_for(dev, "main")
             modified = []
             if j["boot_type"] == "image" and j["wintogo"]:
-                _windows_to_go(j, report, main, main_mount, prog, cancel, log)
+                esp = None
+                if "esp" in by_role:
+                    table = layout.read_layout(dev) or {}
+                    uuids = {p["node"]: p.get("uuid") for p in table.get("partitions", [])}
+                    esp = {"device": by_role["esp"].device, "mount": mountctl.mount_dir_for(dev, "esp"),
+                           "partition_guid": uuids.get(by_role["esp"].device), "disk_guid": table.get("id"),
+                           "main_partition_guid": uuids.get(main.device)}
+                    if not all(esp.values()):
+                        raise UsbError("could not read the partition GUIDs back from the new table")
+                    mountctl.mount(esp["device"], "fat32", esp["mount"], log)
+                try:
+                    _windows_to_go(j, report, main, main_mount, prog, cancel, log, esp)
+                finally:
+                    if esp:
+                        mountctl.unmount(esp["mount"], log)
                 if pbr_variant and j["fs"] == "ntfs" and j["target"] != "uefi":
                     mountctl.unmount(main_mount)
                     bootrec.write_pbr(main.device, "ntfs", "pe", log)
@@ -423,7 +444,7 @@ def _bad_blocks(dev, passes, prog, cancel, log):
     layout.wipe_disk_signatures(dev, int(open(f"/sys/class/block/{os.path.basename(dev)}/size").read()) * 512, 512, log)
 
 
-def _windows_to_go(j, report, main, main_mount, prog, cancel, log):
+def _windows_to_go(j, report, main, main_mount, prog, cancel, log, esp=None):
     """Extract install.wim to temp space, apply, install boot files."""
     inst = report["wininst"][0]
     tmpdir = tempfile.mkdtemp(prefix="fubuki-wtg-", dir=j["temp_dir"])
@@ -454,6 +475,6 @@ def _windows_to_go(j, report, main, main_mount, prog, cancel, log):
         names = {i["index"]: i["name"] for i in report["win_editions"]}
         log(f"Windows To Go: edition {index} ({names.get(index, '?')})")
         windows.setup_windows_to_go(None, report, wim_tmp, index, main.device, main_mount, j["target"], bcd,
-                                    set(j["windows_options"]), log=log, emitter=prog, cancel=cancel, temp_dir=j["temp_dir"])
+                                    set(j["windows_options"]), log=log, emitter=prog, cancel=cancel, temp_dir=j["temp_dir"], esp=esp)
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)

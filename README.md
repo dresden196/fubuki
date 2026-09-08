@@ -15,8 +15,11 @@ engine that works on its own.
 
 Verified this way, by screenshot: Ubuntu ISO mode with persistence (BIOS and
 UEFI), Ubuntu DD with verify, Windows 11 on NTFS via UEFI:NTFS and on FAT32
-with a split install.wim (BIOS and UEFI), Windows To Go (BIOS and UEFI, to
-OOBE), an archiso-based live ISO through Syslinux (BIOS and UEFI), FreeDOS.
+with a split install.wim (BIOS and UEFI), a silent Windows 11 install carried
+through to the desktop on a machine with no TPM, Windows To Go on MBR (BIOS
+and UEFI) and on GPT with an ESP (UEFI), an archiso-based live ISO through
+Syslinux (BIOS and UEFI), FreeDOS. `tests/usb/test-cancel.sh` covers cancel
+mid-write, running out of temporary space, and refused devices.
 
 Both are packaged for Arch Linux (`makepkg` in each directory). Fubuki ships
 with SakuraOS but does not depend on it.

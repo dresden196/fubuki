@@ -9,7 +9,7 @@ Windows. Works on its own from the command line; `fubuki-ui` is the window.
     sudo fubuki write -d /dev/sdb -i win11.iso --scheme gpt --target uefi --fs ntfs \
          --windows-option bypass_requirements --windows-option no_online_account
     sudo fubuki write -d /dev/sdb -i ubuntu.iso --persistence 4G
-    sudo fubuki write -d /dev/sdb -i win11.iso --wintogo 1 --scheme mbr --target dual --fs ntfs
+    sudo fubuki write -d /dev/sdb -i win11.iso --wintogo 1 --scheme gpt --target uefi --fs ntfs
     sudo fubuki write -d /dev/sdb -i image.img.xz --mode dd --verify
     sudo fubuki write -d /dev/sdb --boot-type freedos
 
