@@ -18,7 +18,7 @@ from .util import (UsbError, Cancelled, human_size, payload_path, sync_device, G
 BOOT_TYPES = ("image", "none", "freedos", "syslinux", "grub2", "uefi_ntfs")
 FS_TYPES = ("fat16", "fat32", "ntfs", "exfat", "ext2", "ext3", "ext4")
 
-# Sakura-branded text for the "you booted UEFI-only media in BIOS mode"
+# Text for the "you booted UEFI-only media in BIOS mode"
 # message MBR. Colour codes as in Rufus's msg.S: \0N sets the attribute.
 PROTECTIVE_MESSAGE = (
     "\x07             \x70\xc9" + "\xcd" * 48 + "\xbb \x07\r\n"

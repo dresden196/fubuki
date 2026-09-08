@@ -1,4 +1,4 @@
-# Maintainer: SakuraOS <dev@sakuraos.invalid>
+# Maintainer: Dresden Wildey <dresden196@gmail.com>
 #
 # The USB writer's window. Everything that looks at a disk or an image and
 # every decision about what will boot lives in fubuki; this draws what
@@ -7,9 +7,9 @@
 pkgname=fubuki-ui
 pkgver=0.1.0
 pkgrel=1
-pkgdesc="Fubuki"
+pkgdesc="Fubuki bootable USB writer: the window"
 arch=('x86_64')
-url="https://sakuraos.org"
+url="https://github.com/dresden196/fubuki"
 license=('GPL-3.0-or-later')
 depends=('fubuki' 'qt6-base' 'qt6-declarative' 'kirigami' 'ki18n'
          'qqc2-desktop-style' 'polkit' 'systemd')
@@ -23,11 +23,10 @@ build() {
 }
 
 package() {
-    # The app mark also lives in the Sakura icon themes; hicolor carries it so
-    # the entry has an icon under any theme.
+    # hicolor carries the app mark so the entry has an icon under any theme.
     install -Dm644 "$startdir/icons/fubuki.svg" \
         "$pkgdir/usr/share/icons/hicolor/scalable/apps/fubuki.svg"
     DESTDIR="$pkgdir" cmake --install "$srcdir/build"
-    install -Dm644 "$startdir/org.sakuraos.fubuki.desktop" \
-        "$pkgdir/usr/share/applications/org.sakuraos.fubuki.desktop"
+    install -Dm644 "$startdir/io.github.dresden196.fubuki.desktop" \
+        "$pkgdir/usr/share/applications/io.github.dresden196.fubuki.desktop"
 }

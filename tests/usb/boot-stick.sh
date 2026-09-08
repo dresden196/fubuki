@@ -4,25 +4,25 @@
 #
 #   tests/usb/boot-stick.sh bios 40 out/shot.png
 #   tests/usb/boot-stick.sh uefi 60 out/shot.png
-#   SAKURA_STICK_PERSIST=1 ...   keep what the guest writes (to read its logs afterwards)
+#   FUBUKI_STICK_PERSIST=1 ...   keep what the guest writes (to read its logs afterwards)
 set -euo pipefail
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-OUT="$REPO_ROOT/out"
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+OUT="$HERE/out"
 MODE="${1:-bios}"
 WAIT="${2:-40}"
 SHOT="${3:-$OUT/stick-$MODE.png}"
-STICK="${SAKURA_STICK:-$OUT/usb-stick.img}"
+STICK="${FUBUKI_STICK:-$OUT/usb-stick.img}"
 QMP="$OUT/qmp-stickboot.sock"
 LOG="$OUT/console-stickboot-$MODE.log"
 rm -f "$QMP" "$LOG"
 
 SNAPSHOT=",snapshot=on"
-[[ -n "${SAKURA_STICK_PERSIST:-}" ]] && SNAPSHOT=""
+[[ -n "${FUBUKI_STICK_PERSIST:-}" ]] && SNAPSHOT=""
 fw_args=()
 if [[ "$MODE" == "uefi" ]]; then
     VARS="$OUT/OVMF_VARS-stickboot.fd"
-    cp /usr/share/edk2/x64/OVMF_VARS.4m.fd "$VARS"
-    fw_args=(-drive if=pflash,format=raw,unit=0,readonly=on,file=/usr/share/edk2/x64/OVMF_CODE.4m.fd
+    cp "${OVMF_DIR:-/usr/share/edk2/x64}/OVMF_VARS.4m.fd" "$VARS"
+    fw_args=(-drive if=pflash,format=raw,unit=0,readonly=on,file="${OVMF_DIR:-/usr/share/edk2/x64}/OVMF_CODE.4m.fd"
              -drive if=pflash,format=raw,unit=1,file="$VARS")
 fi
 qemu-system-x86_64 -enable-kvm -machine q35 -cpu host -smp 4 -m "${FUBUKI_BOOT_MEM:-3G}" \

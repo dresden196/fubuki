@@ -2,3 +2,9 @@ __pycache__/
 *.pyc
 out/
 build/
+# makepkg leftovers
+/fubuki/src/
+/fubuki/pkg/
+/fubuki-ui/src/
+/fubuki-ui/pkg/
+*.pkg.tar.zst

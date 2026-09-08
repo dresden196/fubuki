@@ -1,7 +1,7 @@
-# fubuki
+# fubuki (engine)
 
-The engine behind Fubuki: makes bootable USB drives from ISO and
-disk images, the way Rufus does on Windows.
+Makes bootable USB drives from ISO and disk images, the way Rufus does on
+Windows. Works on its own from the command line; `fubuki-ui` is the window.
 
     fubuki devices                       # drives it is willing to write
     fubuki probe some.iso                # what the image is and how it boots
@@ -54,6 +54,6 @@ from Rufus (GPLv3, Pete Batard). `tools/port-ms-sys.py` regenerates
 
 ## Testing
 
-`tests/usb/` in the repository boots the live ISO in QEMU with an emulated
+`tests/usb/` in the repository boots an Arch-based live ISO in QEMU with an emulated
 USB stick and runs the engine inside it, then boots the result under BIOS
 and UEFI. See `tests/usb/run.sh`.

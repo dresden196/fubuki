@@ -1,4 +1,4 @@
-"""SakuraOS USB writer engine.
+"""Fubuki: a bootable USB writer for Linux.
 
 Everything that touches a disk lives here. The window (fubuki-ui) only
 draws what this package reports and hands it a job to run.

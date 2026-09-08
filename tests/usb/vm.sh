@@ -1,29 +1,33 @@
 #!/usr/bin/env bash
-# Boot the SakuraOS live ISO in QEMU with an emulated USB stick, for testing
-# fubuki end to end without touching a real drive.
+# Boot an Arch-based live ISO in QEMU with an emulated USB stick, for testing
+# Fubuki end to end without touching a real drive.
 #
 # The guest sees: a removable USB mass-storage device backed by
-# out/usb-stick.img (raw), the repository at /mnt/repo (9p, read-only), the
-# ISOs directory at /mnt/isos (9p, read-only), and a scratch virtio disk for
-# temporary files. It is driven over the guest agent, so build/guest-run.sh
-# works with SAKURA_VM=usb.
+# tests/usb/out/usb-stick.img (raw), this repository at /mnt/fubuki (9p,
+# read-only), the directory of test ISOs at /mnt/isos (9p, read-only), the
+# directory holding the live ISO at /mnt/live, and a scratch virtio disk for
+# temporary files. It is driven over the guest agent with guest-run.sh.
 #
-#   tests/usb/vm.sh                 boot (headless), 32 GB stick
-#   tests/usb/vm.sh --stick 8G      a smaller stick
+#   FUBUKI_LIVE_ISO=~/Downloads/archlinux-x86_64.iso tests/usb/vm.sh
+#   tests/usb/vm.sh --stick 8G      a smaller stick (default 32G)
 #   tests/usb/vm.sh --reset         recreate the stick and scratch disk
 #   tests/usb/vm.sh --gui           show a window
+#
+# FUBUKI_ISOS is the directory of images to test with (default ~/Downloads).
+# Any live ISO with pacman and python works; guest-setup.sh installs the rest.
 set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-OUT="$REPO_ROOT/out"
-VM="${SAKURA_VM:-usb}"
-ISOS_DIR="${SAKURA_ISOS:-$HOME/Downloads}"
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$HERE/../.." && pwd)"
+OUT="$HERE/out"
+VM="${FUBUKI_VM:-usb}"
+ISOS_DIR="${FUBUKI_ISOS:-$HOME/Downloads}"
 STICK="$OUT/usb-stick.img"
 SCRATCH="$OUT/usb-scratch.qcow2"
 NVRAM="$OUT/OVMF_VARS-$VM.fd"
 QMP_SOCK="$OUT/qmp-$VM.sock"
 QGA_SOCK="$OUT/qga-$VM.sock"
-OVMF_DIR=/usr/share/edk2/x64
+OVMF_DIR="${OVMF_DIR:-/usr/share/edk2/x64}"
 
 stick_size=32G
 reset=0
@@ -38,11 +42,12 @@ while [[ $# -gt 0 ]]; do
     shift
 done
 
-ISO="${SAKURA_ISO:-$(ls -t "$OUT"/sakura-*.iso 2>/dev/null | head -1 || true)}"
-[[ -n "$ISO" ]] || { echo "no SakuraOS ISO in out/" >&2; exit 1; }
+ISO="${FUBUKI_LIVE_ISO:?set FUBUKI_LIVE_ISO to an Arch-based live ISO}"
+[[ -f "$ISO" ]] || { echo "no such ISO: $ISO" >&2; exit 1; }
+LIVE_DIR="$(cd "$(dirname "$ISO")" && pwd)"
 
 mkdir -p "$OUT"
-if (( reset )); then rm -f "$STICK" "$SCRATCH" "$NVRAM"; fi
+if (( reset )); then rm -f "$STICK" "$SCRATCH"; fi
 [[ -f "$STICK" ]] || truncate -s "$stick_size" "$STICK"
 [[ -f "$SCRATCH" ]] || qemu-img create -f qcow2 "$SCRATCH" 40G >/dev/null
 # Fresh firmware variables every boot: once a scenario has made the stick
@@ -55,7 +60,7 @@ display_args=(-display none -device virtio-vga)
 
 echo ">> booting $(basename "$ISO") as \"$VM\" with a $stick_size USB stick ($STICK)"
 exec qemu-system-x86_64 \
-    -enable-kvm -machine q35 -cpu host -smp 6 -m 4G \
+    -enable-kvm -machine q35 -cpu host -smp "${FUBUKI_VM_CPUS:-6}" -m "${FUBUKI_VM_MEM:-4G}" \
     -drive if=pflash,format=raw,unit=0,readonly=on,file="$OVMF_DIR/OVMF_CODE.4m.fd" \
     -drive if=pflash,format=raw,unit=1,file="$NVRAM" \
     -drive file="$ISO",media=cdrom,readonly=on,if=none,id=cd0 \
@@ -63,10 +68,11 @@ exec qemu-system-x86_64 \
     -drive file="$SCRATCH",if=virtio,format=qcow2 \
     -drive file="$STICK",if=none,id=stick,format=raw,cache=writeback \
     -device qemu-xhci,id=xhci \
-    -device usb-storage,bus=xhci.0,drive=stick,removable=on,serial=SAKURATEST01 \
+    -device usb-storage,bus=xhci.0,drive=stick,removable=on,serial=FUBUKITEST01 \
     -device usb-tablet \
-    -virtfs local,path="$REPO_ROOT",mount_tag=repo,security_model=none,readonly=on \
+    -virtfs local,path="$REPO_ROOT",mount_tag=fubuki,security_model=none,readonly=on \
     -virtfs local,path="$ISOS_DIR",mount_tag=isos,security_model=none,readonly=on \
+    -virtfs local,path="$LIVE_DIR",mount_tag=live,security_model=none,readonly=on \
     -netdev user,id=net0 -device virtio-net,netdev=net0 \
     -qmp "unix:$QMP_SOCK,server,nowait" \
     -chardev "socket,path=$QGA_SOCK,server=on,wait=off,id=qga0" \

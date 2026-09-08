@@ -1,7 +1,7 @@
-# Maintainer: SakuraOS <dev@sakuraos.invalid>
+# Maintainer: Dresden Wildey <dresden196@gmail.com>
 #
-# The USB writer engine. Everything that touches a disk is here; the window
-# (fubuki-ui) only draws what this reports and hands it a job.
+# The engine. Everything that touches a disk is here; the window (fubuki-ui)
+# only draws what this reports and hands it a job.
 #
 # The design and the boot payloads come from Rufus (GPLv3, Pete Batard):
 # uefi-ntfs.img, FreeDOS, the Windows 11 24H2 setup wrapper, and the boot
@@ -9,9 +9,9 @@
 pkgname=fubuki
 pkgver=0.1.0
 pkgrel=1
-pkgdesc="SakuraOS bootable USB writer engine"
+pkgdesc="Fubuki bootable USB writer: the engine and command line"
 arch=('any')
-url="https://sakuraos.org"
+url="https://github.com/dresden196/fubuki"
 license=('GPL-3.0-or-later')
 depends=('python' 'python-pyudev' 'util-linux' 'dosfstools' 'ntfs-3g' 'exfatprogs' 'e2fsprogs'
          # Boot loaders for BIOS boot of Linux images. Rufus carries its own
@@ -25,17 +25,17 @@ depends=('python' 'python-pyudev' 'util-linux' 'dosfstools' 'ntfs-3g' 'exfatprog
          'parted'
          'polkit')
 optdepends=('zstd: writing .zst compressed images')
-source=('org.sakuraos.fubuki.policy')
+source=('io.github.dresden196.fubuki.policy')
 sha256sums=('SKIP')
 
 package() {
     install -Dm755 "$startdir/bin/fubuki" "$pkgdir/usr/bin/fubuki"
-    install -d "$pkgdir/usr/lib/sakura/fubuki/fubuki"
-    install -Dm644 "$startdir"/fubuki/*.py -t "$pkgdir/usr/lib/sakura/fubuki/fubuki/"
+    install -d "$pkgdir/usr/lib/fubuki/fubuki"
+    install -Dm644 "$startdir"/fubuki/*.py -t "$pkgdir/usr/lib/fubuki/fubuki/"
     install -d "$pkgdir/usr/share/fubuki"
     cp -r "$startdir/payload/." "$pkgdir/usr/share/fubuki/"
     find "$pkgdir/usr/share/fubuki" -type f -exec chmod 644 {} +
-    install -Dm644 "$srcdir/org.sakuraos.fubuki.policy" \
-        "$pkgdir/usr/share/polkit-1/actions/org.sakuraos.fubuki.policy"
+    install -Dm644 "$srcdir/io.github.dresden196.fubuki.policy" \
+        "$pkgdir/usr/share/polkit-1/actions/io.github.dresden196.fubuki.policy"
     install -Dm644 "$startdir/PROTOCOL.md" "$pkgdir/usr/share/doc/fubuki/PROTOCOL.md"
 }

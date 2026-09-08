@@ -3,8 +3,8 @@
  "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
  "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
 <policyconfig>
-  <vendor>SakuraOS</vendor>
-  <vendor_url>https://sakuraos.org</vendor_url>
+  <vendor>Fubuki</vendor>
+  <vendor_url>https://github.com/dresden196/fubuki</vendor_url>
 
   <!--
     Writing a USB drive: partitioning, formatting, boot records. The engine
@@ -15,7 +15,7 @@
     auth_admin_keep: making two sticks in a row should not mean typing the
     password twice. The window starts the service once and keeps it.
   -->
-  <action id="org.sakuraos.fubuki.write">
+  <action id="io.github.dresden196.fubuki.write">
     <description>Write a bootable USB drive</description>
     <message>Authentication is required to write a USB drive</message>
     <defaults>
