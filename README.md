@@ -21,7 +21,8 @@ and UEFI) and on GPT with an ESP (UEFI), an archiso-based live ISO through
 Syslinux (BIOS and UEFI), FreeDOS. On a physical 64 GB stick handed to QEMU
 over USB passthrough (`tests/usb/boot-real.sh`): Windows 11 on NTFS boots
 under UEFI and under enforcing Secure Boot with Microsoft's certificates
-enrolled. `tests/usb/test-cancel.sh` covers cancel
+enrolled; an archiso live image written in ISO mode boots under BIOS
+(Syslinux) and UEFI. `tests/usb/test-cancel.sh` covers cancel
 mid-write, running out of temporary space, and refused devices.
 
 Both are packaged for Arch Linux (`makepkg` in each directory). Fubuki ships
