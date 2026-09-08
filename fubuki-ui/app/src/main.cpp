@@ -3,14 +3,17 @@
 #include <KLocalizedString>
 
 #include <QFileInfo>
-#include <QGuiApplication>
+#include <QApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickStyle>
 
 int main(int argc, char *argv[])
 {
-    QGuiApplication app(argc, argv);
+    // QApplication rather than QGuiApplication: plasma-integration only
+    // offers its KDE file dialog (the Dolphin-style one) to widget-capable
+    // applications; a QGuiApplication gets Qt Quick's own fallback picker.
+    QApplication app(argc, argv);
     // The application name doubles as the QSettings file the Windows dialog
     // remembers its choices in, so it is the package name rather than the
     // engine's.
