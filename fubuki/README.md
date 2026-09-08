@@ -54,6 +54,8 @@ from Rufus (GPLv3, Pete Batard). `tools/port-ms-sys.py` regenerates
 
 ## Testing
 
-`tests/usb/` in the repository boots an Arch-based live ISO in QEMU with an emulated
+`tests/usb/native.sh` writes a loop-backed disk image on the host and boots
+it under BIOS and UEFI in QEMU; that is the quick check. `tests/usb/vm.sh`
+boots an Arch-based live ISO in QEMU with an emulated
 USB stick and runs the engine inside it, then boots the result under BIOS
 and UEFI. See `tests/usb/run.sh`.
