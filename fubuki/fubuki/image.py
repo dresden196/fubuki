@@ -11,6 +11,8 @@ from .udf import open_image
 from .writer import detect_compression, vhd_footer_size
 from .util import GB, MB, human_size, UsbError
 
+from .i18n import _
+
 SYSLINUX_CFG = ("isolinux.cfg", "syslinux.cfg", "extlinux.conf", "txt.cfg", "live.cfg")
 ISOLINUX_BIN = ("isolinux.bin", "boot.bin")
 GRUB_DIRS = ("/boot/grub/i386-pc", "/boot/grub2/i386-pc")
@@ -64,7 +66,7 @@ def _efi_fat_size(reader, boot):
 def probe(path, log=None):
     """Return the image report as a plain dict (JSON-friendly)."""
     if not os.path.isfile(path):
-        raise UsbError(f"{path} is not a file")
+        raise UsbError(_("%s is not a file") % path)
     size = os.path.getsize(path)
     rep = {
         "path": path, "name": os.path.basename(path), "size": size, "size_human": human_size(size),

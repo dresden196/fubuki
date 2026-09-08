@@ -37,18 +37,19 @@ QQC2.Dialog {
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
                 font.bold: true
-                text: "WARNING: ALL DATA ON DEVICE '" + dlg.deviceText + "' WILL BE DESTROYED."
+                text: i18n("WARNING: ALL DATA ON DEVICE '%1' WILL BE DESTROYED.", dlg.deviceText)
             }
         }
         QQC2.Label {
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
-            text: "Device: " + dlg.deviceText + (dlg.sizeText ? "\nSize: " + dlg.sizeText : "")
+            text: dlg.sizeText ? i18n("Device: %1\nSize: %2", dlg.deviceText, dlg.sizeText)
+                                : i18n("Device: %1", dlg.deviceText)
         }
         QQC2.Label {
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
-            text: "To continue with this operation, click OK. To quit click CANCEL."
+            text: i18n("To continue with this operation, click OK. To quit click CANCEL.")
         }
     }
 }

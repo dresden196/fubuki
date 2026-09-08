@@ -33,7 +33,10 @@ enrolled; an archiso live image written in ISO mode boots under BIOS
 mid-write, running out of temporary space, and refused devices.
 
 Both are packaged for Arch Linux (`makepkg` in each directory). Fubuki ships
-with SakuraOS but does not depend on it.
+with SakuraOS but does not depend on it. The window and the engine's status
+and error messages are translated into German, French, Spanish, Italian,
+Brazilian Portuguese, Dutch, Polish, Russian, Ukrainian, Japanese, Simplified
+Chinese and Korean (`fubuki-ui/po`, `fubuki/po`); the log stays English.
 
 Design and boot payloads derive from [Rufus](https://github.com/pbatard/rufus)
 by Pete Batard, GPLv3. This project is GPL-3.0-or-later.

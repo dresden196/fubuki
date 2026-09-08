@@ -1,5 +1,6 @@
 #include "backend.h"
 
+#include <KLocalizedQmlContext>
 #include <KLocalizedString>
 
 #include <QFileInfo>
@@ -40,6 +41,10 @@ int main(int argc, char *argv[])
 
     Backend backend;
     QQmlApplicationEngine engine;
+    // Gives the QML files i18n()/i18nc()/i18np(), bound to the domain set
+    // above -- otherwise every "Start" and "Cancel" in Main.qml would be a
+    // ReferenceError instead of English.
+    KLocalization::setupLocalizedContext(&engine);
     engine.rootContext()->setContextProperty(QStringLiteral("openFile"), openFile);
     engine.rootContext()->setContextProperty(QStringLiteral("backend"), &backend);
     engine.load(QUrl(QStringLiteral("qrc:/qml/Main.qml")));

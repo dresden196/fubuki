@@ -11,7 +11,7 @@ QQC2.Dialog {
     modal: true
     anchors.centerIn: parent
     width: Math.min(parent.width - Kirigami.Units.largeSpacing * 2, Kirigami.Units.gridUnit * 30)
-    title: "Windows User Experience"
+    title: i18n("Windows User Experience")
     standardButtons: QQC2.Dialog.Ok | QQC2.Dialog.Cancel
 
     property var editions: []
@@ -20,16 +20,16 @@ QQC2.Dialog {
     signal done(var job)
 
     readonly property var allOptions: [
-        { key: "bypass_requirements", label: "Remove requirement for 4GB+ RAM, Secure Boot and TPM 2.0" },
-        { key: "no_online_account", label: "Remove requirement for an online Microsoft account" },
-        { key: "set_user", label: "Create a local account with username:", hasText: true },
-        { key: "duplicate_locale", label: "Set regional options to the same values as this user's" },
-        { key: "no_data_collection", label: "Disable data collection (Skip privacy questions)" },
-        { key: "disable_bitlocker", label: "Disable BitLocker automatic device encryption" },
-        { key: "offline_internal_drives", label: "Set internal drives offline" },
-        { key: "qol_enhancements", label: "Apply Windows quality-of-life defaults (no OneDrive/Outlook/Copilot/ads)" },
-        { key: "silent_install", label: "Silent unattended installation (wipes disk 0!)", hasEditions: true },
-        { key: "use_ms2023_bootloaders", label: "Use 'Windows UEFI CA 2023' signed bootloaders" }
+        { key: "bypass_requirements", label: i18n("Remove requirement for 4GB+ RAM, Secure Boot and TPM 2.0") },
+        { key: "no_online_account", label: i18n("Remove requirement for an online Microsoft account") },
+        { key: "set_user", label: i18n("Create a local account with username:"), hasText: true },
+        { key: "duplicate_locale", label: i18n("Set regional options to the same values as this user's") },
+        { key: "no_data_collection", label: i18n("Disable data collection (Skip privacy questions)") },
+        { key: "disable_bitlocker", label: i18n("Disable BitLocker automatic device encryption") },
+        { key: "offline_internal_drives", label: i18n("Set internal drives offline") },
+        { key: "qol_enhancements", label: i18n("Apply Windows quality-of-life defaults (no OneDrive/Outlook/Copilot/ads)") },
+        { key: "silent_install", label: i18n("Silent unattended installation (wipes disk 0!)"), hasEditions: true },
+        { key: "use_ms2023_bootloaders", label: i18n("Use 'Windows UEFI CA 2023' signed bootloaders") }
     ]
     // Only what this engine says it understands, so an option it would
     // reject is never offered.
@@ -78,7 +78,7 @@ QQC2.Dialog {
         QQC2.Label {
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
-            text: "Customize the Windows installation:"
+            text: i18n("Customize the Windows installation:")
         }
         Repeater {
             id: rows
@@ -101,7 +101,7 @@ QQC2.Dialog {
                     Layout.fillWidth: true
                     Layout.leftMargin: Kirigami.Units.gridUnit * 1.5
                     enabled: box.checked
-                    placeholderText: "Username"
+                    placeholderText: i18n("Username")
                     // Only one such row exists; the id is a hook for the
                     // dialog, which reads it through the alias below.
                     Component.onCompleted: if (visible) dlg.usernameField = nameSlot

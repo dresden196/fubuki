@@ -6,6 +6,8 @@ import subprocess
 
 from .util import run, UsbError, human_size, MB
 
+from .i18n import _
+
 FS_LABEL_MAX = {"fat16": 11, "fat32": 11, "exfat": 11, "ntfs": 32,
                 "ext2": 16, "ext3": 16, "ext4": 16, "udf": 126}
 
@@ -105,7 +107,7 @@ def mkfs(part_dev, fs, label="", cluster_size=0, quick=True, sector_size=512,
             cmd += ["-O", "^metadata_csum_seed,^orphan_file,^64bit"]
         cmd.append(part_dev)
     else:
-        raise UsbError(f"unsupported file system {fs}")
+        raise UsbError(_("unsupported file system %s") % fs)
     run(cmd, log=log, cancel=cancel)
     subprocess.run(["udevadm", "settle", "--timeout=10"], check=False)
     if log:

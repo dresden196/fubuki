@@ -11,3 +11,8 @@ find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Widgets Quick QuickControls2 Q
 find_package(KF6 6.0 REQUIRED COMPONENTS I18n Kirigami)
 
 add_subdirectory(src)
+
+# The .po files live at fubuki-ui/po, a sibling of this directory, so that
+# a checkout can be pointed at with -S app the way the PKGBUILD does. Turns
+# each po/<lang>/fubuki-ui.po into share/locale/<lang>/LC_MESSAGES/fubuki-ui.mo.
+ki18n_install(../po)

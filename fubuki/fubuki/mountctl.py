@@ -12,6 +12,8 @@ import time
 
 from .util import run, UsbError
 
+from .i18n import _
+
 RULES_DIR = "/run/udev/rules.d"
 MOUNT_BASE = "/run/fubuki"
 
@@ -77,7 +79,7 @@ def unmount_all(dev, log=None):
             for line in f.readlines()[1:]:
                 s = line.split()[0]
                 if os.path.basename(os.path.realpath(s)).startswith(name):
-                    raise UsbError(f"{s} is active swap; deactivate it first")
+                    raise UsbError(_("%s is active swap; deactivate it first") % s)
     except OSError:
         pass
 
@@ -88,7 +90,7 @@ def open_exclusive(dev):
     try:
         return os.open(dev, os.O_RDWR | os.O_EXCL)
     except OSError as e:
-        raise UsbError(f"{dev} is in use ({e.strerror}); close anything using it and try again")
+        raise UsbError(_("%s is in use (%s); close anything using it and try again") % (dev, e.strerror))
 
 
 def mount_dir_for(dev, tag="main"):
@@ -123,7 +125,7 @@ def mount(part_dev, fs, mount_dir, log=None):
         if r.returncode == 0:
             return
         errors.append((r.stderr or r.stdout).strip())
-    raise UsbError(f"could not mount {part_dev} ({fs}): " + (errors[-1] if errors else "no mount helper"))
+    raise UsbError(_("could not mount %s (%s): %s") % (part_dev, fs, errors[-1] if errors else _("no mount helper")))
 
 
 def unmount(mount_dir, log=None):

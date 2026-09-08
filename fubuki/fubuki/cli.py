@@ -9,10 +9,12 @@ import threading
 from . import __version__, APP_NAME, devices, fs as fsmod, hashing, image, job as jobmod, unattend as ua
 from .util import Emitter, CancelToken, UsbError, Cancelled, human_size
 
+from .i18n import _
 
-def _need_root(what):
+
+def _need_root():
     if os.geteuid() != 0:
-        raise UsbError(f"{what} needs root: run through pkexec or sudo")
+        raise UsbError(_("Writing a drive needs root: run through pkexec or sudo"))
 
 
 def cmd_devices(args):
@@ -106,12 +108,12 @@ def _parse_size(s):
 
 
 def cmd_write(args):
-    _need_root("writing a drive")
+    _need_root()
     j = _job_from_args(args)
     if not args.json and not args.yes:
         d = devices.find_disk(j.get("device", ""))
         if d is None:
-            raise UsbError(f"{j.get('device')} is not a disk")
+            raise UsbError(_("%s is not a disk") % j.get('device'))
         print(f"About to ERASE {d['device']}: {d['display']}")
         if d["mounted"]:
             print("  (it has mounted partitions; they will be unmounted)")

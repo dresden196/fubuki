@@ -13,10 +13,13 @@ url="https://github.com/dresden196/fubuki"
 license=('GPL-3.0-or-later')
 depends=('fubuki' 'qt6-base' 'qt6-declarative' 'kirigami' 'ki18n'
          'qqc2-desktop-style' 'polkit' 'systemd')
-makedepends=('cmake' 'extra-cmake-modules' 'qt6-tools')
+makedepends=('cmake' 'extra-cmake-modules' 'qt6-tools' 'gettext')
 
 build() {
     cp -r "$startdir/app" "$srcdir/app-src"
+    # po/ is a sibling of app/ in the checkout; CMakeLists.txt finds it at
+    # ../po relative to the source dir, so it has to stay a sibling here too.
+    cp -r "$startdir/po" "$srcdir/po"
     cmake -S "$srcdir/app-src" -B "$srcdir/build" \
         -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
     cmake --build "$srcdir/build" --parallel

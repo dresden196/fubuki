@@ -12,6 +12,8 @@ from . import unattend as ua
 from . import wim as wimmod
 from .util import UsbError, run, payload_path, human_size, MB
 
+from .i18n import _
+
 PE_AMD64, PE_ARM64 = 0x8664, 0xAA64
 BCD_BOOTMGR = "{9dea862c-5cdd-4e70-acc1-f32b344d4795}"
 BCD_TYPE_OSLOADER = 0x10200003
@@ -68,7 +70,7 @@ def _hive_set_labconfig(hive_path, log=None):
     h = hivex.Hivex(hive_path, write=True)
     setup = h.node_get_child(h.root(), "Setup")
     if setup is None:
-        raise UsbError("SYSTEM hive has no Setup key")
+        raise UsbError(_("SYSTEM hive has no Setup key"))
     lab = h.node_get_child(setup, "LabConfig")
     if lab is None:
         lab = h.node_add_child(setup, "LabConfig")
@@ -92,7 +94,7 @@ def apply_customization(mount_dir, report, options, username="", edition_index=1
     if not lines:
         return []
     if emitter:
-        emitter.status("Applying Windows customization...")
+        emitter.status(_("Applying Windows customization..."))
     if log:
         log("Applying Windows customization:")
 
@@ -166,7 +168,7 @@ def apply_customization(mount_dir, report, options, username="", edition_index=1
 
         if winpe:
             if not need_wim:
-                raise UsbError("sources/boot.wim not found; cannot add the answer file")
+                raise UsbError(_("sources/boot.wim not found; cannot add the answer file"))
             commands.append(f"add {xml_path} /Autounattend.xml")
             if log:
                 log("Added 'Autounattend.xml' to 'sources\\boot.wim'")
@@ -182,7 +184,7 @@ def apply_customization(mount_dir, report, options, username="", edition_index=1
 
         if commands:
             if emitter:
-                emitter.status("Updating boot.wim...")
+                emitter.status(_("Updating boot.wim..."))
             if log:
                 log(f"Updating 'sources\\boot.wim[{wim_index}]'...")
             wimmod.update(boot_wim, wim_index, commands, log=None, cancel=cancel)
@@ -267,7 +269,7 @@ def setup_winpe(mount_dir, report, log=None):
     def copy(src_dir, name, dst_name):
         src = _find(mount_dir, src_dir, name)
         if not src:
-            raise UsbError(f"{src_dir}\\{name} not found on the media")
+            raise UsbError(_("%s\\%s not found on the media") % (src_dir, name))
         shutil.copyfile(src, os.path.join(mount_dir, dst_name))
 
     copy(src_base, "ntdetect.com", "ntdetect.com")
@@ -284,7 +286,7 @@ def setup_winpe(mount_dir, report, log=None):
                 log("Detected \\minint with /minint option: nothing to patch")
             return
         if "/i386" not in pe and "/amd64" not in pe:
-            raise UsbError("media has \\minint but no /minint option and no \\i386: unsure how to boot it")
+            raise UsbError(_("media has \\minint but no /minint option and no \\i386: unsure how to boot it"))
 
     path = os.path.join(mount_dir, "BOOTMGR")
     buf = bytearray(open(path, "rb").read())
@@ -348,7 +350,7 @@ def _insert_section_line(path, section, line):
             out.append(line + ("\r\n" if l.endswith("\r\n") else "\n"))
             done = True
     if not done:
-        raise UsbError(f"{section} not found in {os.path.basename(path)}")
+        raise UsbError(_("%s not found in %s") % (section, os.path.basename(path)))
     with open(path, "wb") as f:
         f.write("".join(out).encode("utf-8", "surrogateescape"))
 
@@ -380,7 +382,7 @@ def _patch_bcd(src, dst, loader_path, description="Windows To Go", log=None,
         if t == BCD_TYPE_OSLOADER:
             loaders.append(o)
     if not loaders:
-        raise UsbError("no OS loader entry in the BCD template")
+        raise UsbError(_("no OS loader entry in the BCD template"))
     for o in loaders:
         el = h.node_get_child(o, "Elements")
         wanted = {
@@ -475,7 +477,7 @@ def setup_windows_to_go(reader, report, wim_temp, index, main_dev, mount_dir, ta
     store names the partitions by GUID, like bcdboot does.
     """
     if emitter:
-        emitter.status("Applying Windows image (this takes a while)...")
+        emitter.status(_("Applying Windows image (this takes a while)..."))
     if log:
         log(f"Windows To Go: applying image index {index} to {main_dev}")
     wimmod.apply(wim_temp, index, main_dev, log=log, cancel=cancel, emitter=emitter, ntfs_device=True)
@@ -483,7 +485,7 @@ def setup_windows_to_go(reader, report, wim_temp, index, main_dev, mount_dir, ta
     _try_mount(main_dev, mount_dir, log)
     win = _find(mount_dir, "Windows")
     if not win:
-        raise UsbError("applied image has no Windows directory")
+        raise UsbError(_("applied image has no Windows directory"))
     boot_src = _find(win, "Boot")
     tmp = tempfile.mkdtemp(prefix="fubuki-wtg-", dir=temp_dir)
     try:
@@ -495,7 +497,7 @@ def setup_windows_to_go(reader, report, wim_temp, index, main_dev, mount_dir, ta
             os.makedirs(ms_boot, exist_ok=True)
             src_efi = _find(boot_src, "EFI") if boot_src else None
             if not src_efi:
-                raise UsbError("applied image has no Windows\\Boot\\EFI")
+                raise UsbError(_("applied image has no Windows\\Boot\\EFI"))
             for f in os.listdir(src_efi):
                 if f.lower().endswith(".efi") or f.lower().endswith(".dll"):
                     shutil.copyfile(os.path.join(src_efi, f), os.path.join(ms_boot, f))
@@ -553,4 +555,4 @@ def _try_mount(dev, mount_dir, log=None):
         r = run(cmd, check=False, log=log)
         if r.returncode == 0:
             return
-    raise UsbError(f"could not mount {dev} (NTFS): neither ntfs3 nor ntfs-3g worked")
+    raise UsbError(_("could not mount %s (NTFS): neither ntfs3 nor ntfs-3g worked") % dev)

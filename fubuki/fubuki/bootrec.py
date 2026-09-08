@@ -12,6 +12,8 @@ import struct
 from . import bootcode as bc
 from .util import UsbError, read_at, write_at, KB
 
+from .i18n import _
+
 MBR_KINDS = {
     "rufus": bc.MBR_RUFUS_0X0,          # masquerades the USB as 0x81 when asked
     "win7": bc.MBR_WIN7_0X0,
@@ -45,7 +47,7 @@ def _write_bootmarks(dev, base, sector_size):
 def write_mbr_code(dev, kind, log=None):
     """Replace the boot code in sector 0, keeping the disk id and partition table."""
     if kind not in MBR_KINDS:
-        raise UsbError(f"unknown MBR type {kind}")
+        raise UsbError(_("unknown MBR type %s") % kind)
     code = MBR_KINDS[kind]
     if len(code) > 0x1B8:
         # mbr_zero is 446 bytes: it covers the disk signature too, on purpose.
@@ -114,8 +116,8 @@ def write_sbr(dev, data, offset, first_partition_offset, log=None):
     """Secondary boot record between the MBR and the first partition:
     GRUB2's core.img, or the text for the protective-message MBR."""
     if offset + len(data) > first_partition_offset:
-        raise UsbError("not enough space before the first partition for the boot loader "
-                       "(uncheck 'Add fixes for old BIOSes')")
+        raise UsbError(_("not enough space before the first partition for the boot loader "
+                         "(uncheck 'Add fixes for old BIOSes')"))
     write_at(dev, offset, data)
     if log:
         log(f"Wrote {len(data)} byte secondary boot record at offset {offset}")
@@ -147,7 +149,7 @@ def write_pbr(part_dev, fs, variant="std", log=None, drive_id=0x80):
     boot = read_at(part_dev, 0, max(512, sector_size))
     if fs == "ntfs":
         if not _is_ntfs(boot):
-            raise UsbError("new volume does not have an NTFS boot sector")
+            raise UsbError(_("new volume does not have an NTFS boot sector"))
         write_at(part_dev, 0x0, bc.BR_NTFS_0X0)
         write_at(part_dev, 0x54, bc.BR_NTFS_0X54)
         if log:
@@ -155,7 +157,7 @@ def write_pbr(part_dev, fs, variant="std", log=None, drive_id=0x80):
         return
     if fs == "fat32":
         if not _is_fat32(boot):
-            raise UsbError("new volume does not have a FAT32 boot sector")
+            raise UsbError(_("new volume does not have a FAT32 boot sector"))
         tables = {
             "std": (bc.BR_FAT32_0X52, bc.BR_FAT32_0X3F0, None),
             "nt": (bc.BR_FAT32NT_0X52, bc.BR_FAT32NT_0X3F0, bc.BR_FAT32NT_0X1800),
@@ -187,7 +189,7 @@ def write_pbr(part_dev, fs, variant="std", log=None, drive_id=0x80):
         return
     if fs == "fat16":
         if not _is_fat16(boot):
-            raise UsbError("new volume does not have a FAT16 boot sector")
+            raise UsbError(_("new volume does not have a FAT16 boot sector"))
         code = bc.BR_FAT16FD_0X3E if variant == "fd" else bc.BR_FAT16_0X3E
         write_at(part_dev, 0x0, bc.BR_FAT16_0X0)
         write_at(part_dev, 0x3E, code)
@@ -198,7 +200,7 @@ def write_pbr(part_dev, fs, variant="std", log=None, drive_id=0x80):
         return
     if fs in ("ext2", "ext3", "ext4", "exfat"):
         return
-    raise UsbError(f"no boot record support for {fs}")
+    raise UsbError(_("no boot record support for %s") % fs)
 
 
 def describe_mbr(dev):

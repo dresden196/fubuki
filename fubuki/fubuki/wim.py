@@ -8,6 +8,8 @@ import xml.etree.ElementTree as ET
 
 from .util import run, UsbError, require_tool
 
+from .i18n import _
+
 WIM_MAGIC = b"MSWIM\x00\x00\x00"
 ARCH_NAMES = {0: "x86", 5: "arm", 6: "ia64", 9: "x64", 12: "arm64"}
 
@@ -54,11 +56,11 @@ def read_xml_from_reader(reader, entry):
     """Read a WIM's XML index through an ISO/UDF reader without extracting it."""
     hdr = reader.read(entry, 0, 208)
     if hdr[:8] != WIM_MAGIC:
-        raise UsbError(f"{entry.path} is not a WIM file")
+        raise UsbError(_("%s is not a WIM file") % entry.path)
     size = int.from_bytes(hdr[0x48:0x4F], "little")
     offset = struct.unpack_from("<Q", hdr, 0x50)[0]
     if size == 0 or offset + size > entry.size:
-        raise UsbError(f"{entry.path} has no XML index")
+        raise UsbError(_("%s has no XML index") % entry.path)
     return reader.read(entry, offset, size)
 
 
@@ -70,7 +72,7 @@ def images_from_file(path):
     with open(path, "rb") as f:
         hdr = f.read(208)
         if hdr[:8] != WIM_MAGIC:
-            raise UsbError(f"{path} is not a WIM file")
+            raise UsbError(_("%s is not a WIM file") % path)
         size = int.from_bytes(hdr[0x48:0x4F], "little")
         offset = struct.unpack_from("<Q", hdr, 0x50)[0]
         f.seek(offset)
@@ -109,7 +111,7 @@ def _quiet(cmd, log=None, cancel=None):
     r = run(cmd, check=False, log=log, cancel=cancel)
     if r.returncode != 0:
         lines = [l for l in (r.stderr or r.stdout).splitlines() if l.strip() and not l.startswith("Extracting")]
-        raise UsbError(f"{cmd[0]} failed: {lines[-1] if lines else r.returncode}")
+        raise UsbError(_("%s failed: %s") % (cmd[0], lines[-1] if lines else r.returncode))
     return r
 
 
@@ -126,7 +128,7 @@ def update(wim, index, commands, log=None, cancel=None):
     script = "\n".join(commands) + "\n"
     r = run(["wimupdate", wim, str(index)], input=script, check=False, log=log, cancel=cancel)
     if r.returncode != 0:
-        raise UsbError("wimupdate failed: " + ((r.stderr or r.stdout).strip().splitlines() or ["?"])[-1])
+        raise UsbError(_("wimupdate failed: %s") % ((r.stderr or r.stdout).strip().splitlines() or ["?"])[-1])
 
 
 def split(wim, dest_swm, part_size_mb=4000, log=None, cancel=None, emitter=None):
@@ -165,7 +167,7 @@ def apply(wim, index, target, log=None, cancel=None, emitter=None, ntfs_device=F
         from .util import Cancelled
         raise Cancelled()
     if proc.returncode != 0:
-        raise UsbError("wimapply failed: " + last)
+        raise UsbError(_("wimapply failed: %s") % last)
     if log:
         log(f"Applied {os.path.basename(wim)} [{index}] to {target}")
 

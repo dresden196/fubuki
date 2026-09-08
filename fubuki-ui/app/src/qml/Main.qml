@@ -18,6 +18,9 @@ QQC2.ApplicationWindow {
     color: Kirigami.Theme.backgroundColor
 
     readonly property int megabyte: 1024 * 1024
+    // The bad-blocks pass-count combo. A plural form per count, built once
+    // rather than inline in the model literal so it can be translated.
+    readonly property var passChoices: [1, 2, 3, 4].map(n => i18np("%1 pass", "%1 passes", n))
 
     // ---- what the engine told us -------------------------------------------
     readonly property var image: backend.image
@@ -40,11 +43,11 @@ QQC2.ApplicationWindow {
     // Boot selection combo, in Rufus's order. Index 0 is the image slot; its
     // text becomes the image name once one is chosen.
     readonly property var bootTypes: [
-        { text: hasImage ? image.name : "Disk or ISO image (Please select)", value: "image" },
-        { text: "Non bootable", value: "none" },
-        { text: "FreeDOS", value: "freedos" },
-        { text: "UEFI:NTFS", value: "uefi_ntfs" },
-        { text: "Syslinux (embedded)", value: "syslinux" }
+        { text: hasImage ? image.name : i18n("Disk or ISO image (Please select)"), value: "image" },
+        { text: i18n("Non bootable"), value: "none" },
+        { text: i18n("FreeDOS"), value: "freedos" },
+        { text: i18n("UEFI:NTFS"), value: "uefi_ntfs" },
+        { text: i18n("Syslinux (embedded)"), value: "syslinux" }
     ]
     property string bootType: "image"
     property string imageOption: ""     // iso | dd | install | wintogo
@@ -73,13 +76,13 @@ QQC2.ApplicationWindow {
     readonly property var imageOptions: {
         if (bootType !== "image" || !hasImage) return []
         if (windowsInstall) {
-            return [{ text: "Standard Windows installation", value: "install" },
-                    { text: "Windows To Go", value: "wintogo" }]
+            return [{ text: i18n("Standard Windows installation"), value: "install" },
+                    { text: i18n("Windows To Go"), value: "wintogo" }]
         }
         const rec = image.recommended || {}
         let out = []
-        if (rec.iso_mode_available) out.push({ text: "ISO Image mode (Recommended)", value: "iso" })
-        if (rec.dd_mode_available) out.push({ text: "DD Image mode", value: "dd" })
+        if (rec.iso_mode_available) out.push({ text: i18n("ISO Image mode (Recommended)"), value: "iso" })
+        if (rec.dd_mode_available) out.push({ text: i18n("DD Image mode"), value: "dd" })
         return out
     }
     readonly property bool imageUnsupported: bootType === "image" && hasImage && imageOptions.length === 0
@@ -91,10 +94,10 @@ QQC2.ApplicationWindow {
     // GPT boots UEFI only; MBR can do anything. "BIOS or UEFI" therefore
     // exists only under MBR, which is the whole coupling rule.
     readonly property var targets: scheme === "gpt"
-        ? [{ text: "UEFI (non CSM)", value: "uefi" }]
-        : [{ text: "BIOS (or UEFI-CSM)", value: "bios" },
-           { text: "UEFI (non CSM)", value: "uefi" },
-           { text: "BIOS or UEFI", value: "dual" }]
+        ? [{ text: i18n("UEFI (non CSM)"), value: "uefi" }]
+        : [{ text: i18n("BIOS (or UEFI-CSM)"), value: "bios" },
+           { text: i18n("UEFI (non CSM)"), value: "uefi" },
+           { text: i18n("BIOS or UEFI"), value: "dual" }]
 
     readonly property bool needsNtfs: (hasImage && bootType === "image" && !!image.needs_ntfs)
                                       || bootType === "uefi_ntfs"
@@ -117,11 +120,11 @@ QQC2.ApplicationWindow {
     }
 
     readonly property var clusterChoices: {
-        let out = [{ text: "Default", value: 0 }]
+        let out = [{ text: i18n("Default"), value: 0 }]
         const list = backend.clusterChoices || []
         for (let i = 0; i < list.length; ++i) {
             const c = list[i]
-            out.push({ text: clusterText(c) + (c === backend.clusterDefault ? " (Default)" : ""), value: c })
+            out.push({ text: clusterText(c) + (c === backend.clusterDefault ? i18n(" (Default)") : ""), value: c })
         }
         return out
     }
@@ -309,10 +312,10 @@ QQC2.ApplicationWindow {
     // ---- dialogs --------------------------------------------------------------
     FileDialog {
         id: fileDialog
-        title: "Select an image"
+        title: i18n("Select an image")
         nameFilters: [
-            "Disk images (*.iso *.img *.raw *.bin *.vhd *.wim *.esd *.gz *.xz *.bz2 *.zst)",
-            "All files (*)"
+            i18n("Disk images (%1)", "*.iso *.img *.raw *.bin *.vhd *.wim *.esd *.gz *.xz *.bz2 *.zst"),
+            i18n("All files (%1)", "*")
         ]
         onAccepted: root.selectImage(backend.localFile(selectedFile))
     }
@@ -340,10 +343,10 @@ QQC2.ApplicationWindow {
         parent: root.contentItem
         anchors.centerIn: parent
         modal: true
-        title: "Write in progress"
+        title: i18n("Write in progress")
         standardButtons: QQC2.Dialog.Yes | QQC2.Dialog.No
         QQC2.Label {
-            text: "A drive is still being written. Cancel it and close?"
+            text: i18n("A drive is still being written. Cancel it and close?")
         }
         onAccepted: {
             root.pendingClose = true
@@ -370,10 +373,10 @@ QQC2.ApplicationWindow {
             spacing: Kirigami.Units.smallSpacing
 
             // ================= Drive Properties =================
-            Kirigami.Heading { text: "Drive Properties"; level: 4 }
+            Kirigami.Heading { text: i18n("Drive Properties"); level: 4 }
             Kirigami.Separator { Layout.fillWidth: true }
 
-            QQC2.Label { text: "Device"; Layout.topMargin: Kirigami.Units.smallSpacing }
+            QQC2.Label { text: i18n("Device"); Layout.topMargin: Kirigami.Units.smallSpacing }
             RowLayout {
                 Layout.fillWidth: true
                 QQC2.ComboBox {
@@ -382,7 +385,7 @@ QQC2.ApplicationWindow {
                     enabled: !root.busy
                     model: backend.devices
                     textRole: "display"
-                    displayText: count === 0 ? "No device found" : currentText
+                    displayText: count === 0 ? i18n("No device found") : currentText
                     currentIndex: {
                         const list = backend.devices || []
                         for (let i = 0; i < list.length; ++i) {
@@ -396,13 +399,13 @@ QQC2.ApplicationWindow {
                     icon.name: "view-refresh"
                     enabled: !root.busy
                     onClicked: backend.refreshDevices()
-                    QQC2.ToolTip.text: "Refresh the device list"
+                    QQC2.ToolTip.text: i18n("Refresh the device list")
                     QQC2.ToolTip.visible: hovered
                     QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
                 }
             }
 
-            QQC2.Label { text: "Boot selection"; Layout.topMargin: Kirigami.Units.smallSpacing }
+            QQC2.Label { text: i18n("Boot selection"); Layout.topMargin: Kirigami.Units.smallSpacing }
             RowLayout {
                 Layout.fillWidth: true
                 QQC2.ComboBox {
@@ -418,12 +421,12 @@ QQC2.ApplicationWindow {
                     text: "#"
                     enabled: root.hasImage && !root.busy
                     onClicked: checksumDialog.open(root.image.path, root.image.name)
-                    QQC2.ToolTip.text: "Compute image checksums"
+                    QQC2.ToolTip.text: i18n("Compute image checksums")
                     QQC2.ToolTip.visible: hovered
                     QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
                 }
                 QQC2.Button {
-                    text: "SELECT"
+                    text: i18nc("@action:button", "SELECT")
                     enabled: !root.busy
                     onClicked: fileDialog.open()
                 }
@@ -431,7 +434,7 @@ QQC2.ApplicationWindow {
 
             QQC2.Label {
                 visible: root.imageUnsupported
-                text: "This image cannot be written: it is neither a bootable ISO nor a disk image."
+                text: i18n("This image cannot be written: it is neither a bootable ISO nor a disk image.")
                 color: Kirigami.Theme.negativeTextColor
                 wrapMode: Text.WordWrap
                 Layout.fillWidth: true
@@ -439,7 +442,7 @@ QQC2.ApplicationWindow {
 
             QQC2.Label {
                 visible: imageOptionCombo.visible
-                text: "Image option"
+                text: i18n("Image option")
                 Layout.topMargin: Kirigami.Units.smallSpacing
             }
             QQC2.ComboBox {
@@ -455,7 +458,7 @@ QQC2.ApplicationWindow {
 
             QQC2.Label {
                 visible: editionCombo.visible
-                text: "Windows edition"
+                text: i18n("Windows edition")
                 Layout.topMargin: Kirigami.Units.smallSpacing
             }
             QQC2.ComboBox {
@@ -477,7 +480,7 @@ QQC2.ApplicationWindow {
 
             QQC2.Label {
                 visible: persistenceRow.visible
-                text: "Persistent partition size"
+                text: i18n("Persistent partition size")
                 Layout.topMargin: Kirigami.Units.smallSpacing
             }
             RowLayout {
@@ -514,8 +517,8 @@ QQC2.ApplicationWindow {
             }
             QQC2.Label {
                 visible: persistenceRow.visible
-                text: root.persistenceMB > 0 ? backend.humanSize(root.persistenceMB * root.megabyte) + " persistent partition"
-                                             : "0 (No persistence)"
+                text: root.persistenceMB > 0 ? i18n("%1 persistent partition", backend.humanSize(root.persistenceMB * root.megabyte))
+                                             : i18n("0 (No persistence)")
                 font: Kirigami.Theme.smallFont
                 opacity: 0.7
             }
@@ -527,7 +530,7 @@ QQC2.ApplicationWindow {
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: Kirigami.Units.smallSpacing
-                    QQC2.Label { text: "Partition scheme" }
+                    QQC2.Label { text: i18n("Partition scheme") }
                     QQC2.ComboBox {
                         Layout.fillWidth: true
                         enabled: !root.busy
@@ -540,7 +543,7 @@ QQC2.ApplicationWindow {
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: Kirigami.Units.smallSpacing
-                    QQC2.Label { text: "Target system" }
+                    QQC2.Label { text: i18n("Target system") }
                     QQC2.ComboBox {
                         Layout.fillWidth: true
                         enabled: !root.busy
@@ -556,7 +559,7 @@ QQC2.ApplicationWindow {
                 Layout.topMargin: Kirigami.Units.smallSpacing
                 flat: true
                 icon.name: root.advancedDrive ? "arrow-up" : "arrow-down"
-                text: root.advancedDrive ? "Hide advanced drive properties" : "Show advanced drive properties"
+                text: root.advancedDrive ? i18n("Hide advanced drive properties") : i18n("Show advanced drive properties")
                 onClicked: root.advancedDrive = !root.advancedDrive
             }
             ColumnLayout {
@@ -564,18 +567,18 @@ QQC2.ApplicationWindow {
                 spacing: 0
                 enabled: !root.busy
                 QQC2.CheckBox {
-                    text: "List USB Hard Drives"
+                    text: i18n("List USB Hard Drives")
                     checked: backend.listUsbHdd
                     onToggled: backend.listUsbHdd = checked
                 }
                 QQC2.CheckBox {
-                    text: "Add fixes for old BIOSes (extra partition, align, etc.)"
+                    text: i18n("Add fixes for old BIOSes (extra partition, align, etc.)")
                     enabled: root.scheme === "mbr" && root.target !== "uefi"
                     checked: root.oldBiosFixes
                     onToggled: root.oldBiosFixes = checked
                 }
                 QQC2.CheckBox {
-                    text: "Use masquerading MBR (BIOS ID 0x81)"
+                    text: i18n("Use masquerading MBR (BIOS ID 0x81)")
                     enabled: root.scheme === "mbr" && root.target !== "uefi"
                     checked: root.rufusMbr
                     onToggled: root.rufusMbr = checked
@@ -583,10 +586,10 @@ QQC2.ApplicationWindow {
             }
 
             // ================= Format Options =================
-            Kirigami.Heading { text: "Format Options"; level: 4; Layout.topMargin: Kirigami.Units.largeSpacing }
+            Kirigami.Heading { text: i18n("Format Options"); level: 4; Layout.topMargin: Kirigami.Units.largeSpacing }
             Kirigami.Separator { Layout.fillWidth: true }
 
-            QQC2.Label { text: "Volume label"; Layout.topMargin: Kirigami.Units.smallSpacing }
+            QQC2.Label { text: i18n("Volume label"); Layout.topMargin: Kirigami.Units.smallSpacing }
             QQC2.TextField {
                 Layout.fillWidth: true
                 // DD writes the image's own partition table and file systems;
@@ -604,7 +607,7 @@ QQC2.ApplicationWindow {
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: Kirigami.Units.smallSpacing
-                    QQC2.Label { text: "File system" }
+                    QQC2.Label { text: i18n("File system") }
                     QQC2.ComboBox {
                         Layout.fillWidth: true
                         model: root.fileSystems
@@ -616,7 +619,7 @@ QQC2.ApplicationWindow {
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: Kirigami.Units.smallSpacing
-                    QQC2.Label { text: "Cluster size" }
+                    QQC2.Label { text: i18n("Cluster size") }
                     QQC2.ComboBox {
                         Layout.fillWidth: true
                         model: root.clusterChoices
@@ -631,7 +634,7 @@ QQC2.ApplicationWindow {
                 Layout.topMargin: Kirigami.Units.smallSpacing
                 flat: true
                 icon.name: root.advancedFormat ? "arrow-up" : "arrow-down"
-                text: root.advancedFormat ? "Hide advanced format options" : "Show advanced format options"
+                text: root.advancedFormat ? i18n("Hide advanced format options") : i18n("Show advanced format options")
                 onClicked: root.advancedFormat = !root.advancedFormat
             }
             ColumnLayout {
@@ -639,26 +642,26 @@ QQC2.ApplicationWindow {
                 spacing: 0
                 enabled: !root.busy && !root.ddMode
                 QQC2.CheckBox {
-                    text: "Quick format"
+                    text: i18n("Quick format")
                     checked: root.quickFormat
                     onToggled: root.quickFormat = checked
                 }
                 QQC2.CheckBox {
-                    text: "Create extended label and icon files"
+                    text: i18n("Create extended label and icon files")
                     checked: root.extendedLabel
                     onToggled: root.extendedLabel = checked
                 }
                 RowLayout {
                     QQC2.CheckBox {
                         id: badBlocksCheck
-                        text: "Check device for bad blocks"
+                        text: i18n("Check device for bad blocks")
                         checked: root.badBlocks > 0
                         onToggled: root.badBlocks = checked ? Math.max(1, passesCombo.currentIndex + 1) : 0
                     }
                     QQC2.ComboBox {
                         id: passesCombo
                         enabled: badBlocksCheck.checked
-                        model: ["1 pass", "2 passes", "3 passes", "4 passes"]
+                        model: root.passChoices
                         currentIndex: Math.max(0, root.badBlocks - 1)
                         onActivated: function (index) { root.badBlocks = index + 1 }
                     }
@@ -666,7 +669,7 @@ QQC2.ApplicationWindow {
             }
 
             // ================= Status =================
-            Kirigami.Heading { text: "Status"; level: 4; Layout.topMargin: Kirigami.Units.largeSpacing }
+            Kirigami.Heading { text: i18n("Status"); level: 4; Layout.topMargin: Kirigami.Units.largeSpacing }
             Kirigami.Separator { Layout.fillWidth: true }
 
             QQC2.Label {
@@ -698,7 +701,7 @@ QQC2.ApplicationWindow {
                 Layout.fillWidth: true
                 Layout.topMargin: Kirigami.Units.smallSpacing
                 QQC2.Button {
-                    text: "Log"
+                    text: i18nc("@action:button toggles the log pane", "Log")
                     checkable: true
                     checked: root.showLog
                     icon.name: "text-x-log"
@@ -711,14 +714,14 @@ QQC2.ApplicationWindow {
                     opacity: 0.7
                 }
                 QQC2.Button {
-                    text: backend.running ? "CANCEL" : "START"
+                    text: backend.running ? i18nc("@action:button", "CANCEL") : i18nc("@action:button", "START")
                     enabled: backend.running || root.canStart
                     highlighted: !backend.running
                     Layout.preferredWidth: Kirigami.Units.gridUnit * 6
                     onClicked: backend.running ? backend.cancel() : root.startClicked()
                 }
                 QQC2.Button {
-                    text: "CLOSE"
+                    text: i18nc("@action:button", "CLOSE")
                     Layout.preferredWidth: Kirigami.Units.gridUnit * 6
                     onClicked: root.close()
                 }
@@ -738,7 +741,7 @@ QQC2.ApplicationWindow {
                     font.family: "monospace"
                     font.pointSize: Kirigami.Theme.smallFont.pointSize
                     text: backend.log
-                    placeholderText: "Nothing logged yet."
+                    placeholderText: i18n("Nothing logged yet.")
                     // Follows the newest line, which is where the news is.
                     onTextChanged: cursorPosition = length
                     background: Rectangle {

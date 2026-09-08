@@ -10,7 +10,7 @@ QQC2.Dialog {
     modal: true
     anchors.centerIn: parent
     width: Math.min(parent.width - Kirigami.Units.largeSpacing * 2, Kirigami.Units.gridUnit * 30)
-    title: "Checksums"
+    title: i18n("Checksums")
     standardButtons: QQC2.Dialog.Close
 
     property string imageName: ""
@@ -60,7 +60,7 @@ QQC2.Dialog {
                     font.family: "monospace"
                     font.pointSize: Kirigami.Theme.smallFont.pointSize
                     text: backend.hashes[modelData.key] || ""
-                    placeholderText: backend.hashing ? "Computing…" : ""
+                    placeholderText: backend.hashing ? i18n("Computing…") : ""
                 }
             }
         }

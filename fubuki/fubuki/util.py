@@ -8,6 +8,9 @@ import sys
 import threading
 import time
 
+
+from .i18n import _
+
 KB = 1024
 MB = KB * KB
 GB = MB * KB
@@ -141,7 +144,7 @@ def which(name):
 def require_tool(name, package=None):
     if not shutil.which(name):
         hint = f" (install {package})" if package else ""
-        raise UsbError(f"'{name}' is not available on this system{hint}")
+        raise UsbError(_("'%s' is not available on this system%s") % (name, hint))
 
 
 def run(cmd, check=True, input=None, capture=True, env=None, cancel=None, cwd=None, log=None):
@@ -174,7 +177,7 @@ def run(cmd, check=True, input=None, capture=True, env=None, cancel=None, cwd=No
     if check and res.returncode != 0:
         msg = (res.stderr or res.stdout or "").strip().splitlines()
         tail = msg[-1] if msg else f"exit code {res.returncode}"
-        raise UsbError(f"{os.path.basename(str(cmd[0]))} failed: {tail}")
+        raise UsbError(_("%s failed: %s") % (os.path.basename(str(cmd[0])), tail))
     return res
 
 
@@ -206,7 +209,7 @@ def write_at(dev, offset, data):
     try:
         n = os.pwrite(fd, data, offset)
         if n != len(data):
-            raise UsbError(f"short write to {dev} at {offset}")
+            raise UsbError(_("short write to %s at %s") % (dev, offset))
         os.fsync(fd)
     finally:
         os.close(fd)
@@ -220,5 +223,5 @@ def payload_dir():
 def payload_path(*parts):
     p = os.path.join(payload_dir(), *parts)
     if not os.path.exists(p):
-        raise UsbError(f"missing payload file: {p}")
+        raise UsbError(_("missing payload file: %s") % p)
     return p

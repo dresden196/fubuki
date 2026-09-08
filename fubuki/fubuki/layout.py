@@ -15,6 +15,8 @@ import uuid
 
 from .util import MB, KB, align_up, align_down, run, UsbError
 
+from .i18n import _
+
 # GPT type GUIDs
 GPT_MS_DATA = "EBD0A0A2-B9E5-4433-87C0-68B6B72699C7"
 GPT_ESP = "C12A7328-F81F-11D2-BA4B-00A0C93EC93B"
@@ -63,7 +65,7 @@ def plan(disk_size, sector_size, scheme, fs, bootable=True, extras=(), persisten
     among {'uefi_ntfs','esp','msr','persistence','compat'}."""
     extras = set(extras)
     if scheme not in ("mbr", "gpt"):
-        raise UsbError(f"unknown partition scheme {scheme}")
+        raise UsbError(_("unknown partition scheme %s") % scheme)
     cluster = cluster_size or 512
     # Linux has no real geometry for USB; BIOSes assume 63 sectors/track.
     bytes_per_track = 63 * sector_size
@@ -88,7 +90,7 @@ def plan(disk_size, sector_size, scheme, fs, bootable=True, extras=(), persisten
         extras.discard("esp")
     if "msr" in extras:
         if scheme != "gpt":
-            raise UsbError("an MSR partition needs GPT")
+            raise UsbError(_("an MSR partition needs GPT"))
         p = Partition("Microsoft Reserved Partition", "msr")
         p.offset, p.size = offset, MSR_SIZE
         p.gpt_type = GPT_MSR
@@ -105,7 +107,7 @@ def plan(disk_size, sector_size, scheme, fs, bootable=True, extras=(), persisten
     tail = []
     if "persistence" in extras:
         if persistence_size <= 0:
-            raise UsbError("persistence requested with no size")
+            raise UsbError(_("persistence requested with no size"))
         p = Partition("Linux Persistence", "persistence")
         p.size = align_up(persistence_size, bytes_per_track)
         p.gpt_type = GPT_LINUX
@@ -133,7 +135,7 @@ def plan(disk_size, sector_size, scheme, fs, bootable=True, extras=(), persisten
         tail.append(p)
     parts.extend(tail)
     if len(parts) > MAX_PARTITIONS:
-        raise UsbError("too many partitions")
+        raise UsbError(_("too many partitions"))
 
     # Extra partitions are packed at the end of the disk, track-aligned.
     last = disk_size
@@ -141,16 +143,16 @@ def plan(disk_size, sector_size, scheme, fs, bootable=True, extras=(), persisten
         last -= 33 * sector_size
     for p in reversed(tail):
         if p.size >= last:
-            raise UsbError(f"{p.name} does not fit on this drive")
+            raise UsbError(_("%s does not fit on this drive") % p.name)
         p.offset = align_down(last - p.size, bytes_per_track)
         last = p.offset
     if last <= main.offset:
-        raise UsbError("drive is too small for this layout")
+        raise UsbError(_("drive is too small for this layout"))
     main.size = align_down(last - main.offset, bytes_per_track)
     if cluster % sector_size == 0:
         main.size = align_down(main.size, cluster)
     if main.size <= 0:
-        raise UsbError("drive is too small for this layout")
+        raise UsbError(_("drive is too small for this layout"))
 
     main.mbr_type = {
         "fat16": MBR_FAT16_LBA, "fat32": MBR_FAT32_LBA,
@@ -158,7 +160,7 @@ def plan(disk_size, sector_size, scheme, fs, bootable=True, extras=(), persisten
         "ext2": MBR_LINUX, "ext3": MBR_LINUX, "ext4": MBR_LINUX,
     }.get(fs)
     if main.mbr_type is None:
-        raise UsbError(f"unsupported file system {fs}")
+        raise UsbError(_("unsupported file system %s") % fs)
     if write_as_esp:
         main.mbr_type = MBR_ESP
         main.gpt_type = GPT_ESP
@@ -242,7 +244,7 @@ def apply(dev, parts, scheme, sector_size, mbr_uefi_marker=False, log=None):
                 break
             time.sleep(0.1)
         else:
-            raise UsbError(f"{p.device} did not appear after partitioning")
+            raise UsbError(_("%s did not appear after partitioning") % p.device)
     return parts
 
 

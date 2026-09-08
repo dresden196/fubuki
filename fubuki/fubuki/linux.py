@@ -12,6 +12,8 @@ import subprocess
 
 from .util import run, UsbError, payload_path, require_tool, which
 
+from .i18n import _
+
 SYSLINUX_LIB = "/usr/lib/syslinux/bios"
 # Modules a 6.x ldlinux.sys needs beside the ones the ISO already ships.
 SYSLINUX_CORE_MODULES = ("ldlinux.c32", "libcom32.c32", "libutil.c32", "libmenu.c32", "libgpl.c32")
@@ -94,7 +96,7 @@ def install_syslinux(part_dev, mount_dir, report, fs, log=None, embedded=False, 
             finally:
                 run(["mount", part_dev, mount_dir], log=log)
         else:
-            raise UsbError("extlinux failed: " + (r.stderr or r.stdout).strip().splitlines()[-1:] .__str__())
+            raise UsbError(_("extlinux failed: %s") % (r.stderr or r.stdout).strip().splitlines()[-1:].__str__())
     os.sync()
 
 

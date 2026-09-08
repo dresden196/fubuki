@@ -13,6 +13,8 @@ from . import wim as wimmod
 from .image import SYSLINUX_CFG, GRUB_CFG, WININST
 from .util import GB, MB, UsbError, human_size
 
+from .i18n import _
+
 CFG_TOKENS = ("options", "append", "linux", "linuxefi", "$linux", "search", "for")
 
 
@@ -175,12 +177,12 @@ def extract_iso(reader, report, dest, fs, usb_label, emitter=None, cancel=None, 
             split_done.append(rel)
             continue
         if fat and e.size >= 4 * GB:
-            raise UsbError(f"'{rel}' is {human_size(e.size)}: FAT32 cannot hold files over 4 GB. Use NTFS or exFAT.")
+            raise UsbError(_("'%s' is %s: FAT32 cannot hold files over 4 GB. Use NTFS or exFAT.") % (rel, human_size(e.size)))
 
         try:
             reader.extract(e, target, progress=progress, cancel=cancel)
         except OSError as ex:
-            raise UsbError(f"could not write {rel}: {ex.strerror}")
+            raise UsbError(_("could not write %s: %s") % (rel, ex.strerror))
 
         if base.endswith(".cfg") or base in SYSLINUX_CFG or (dirname == "/loader/entries" and base.endswith(".conf")):
             fix_config(target, rel, report, usb_label, persistence, modified, log)
@@ -198,16 +200,17 @@ def _split_wim(reader, e, target, temp_dir, progress, cancel, log, emitter):
     try:
         free = shutil.disk_usage(tmpdir).free
         if free < e.size + 64 * MB:
-            raise UsbError(f"splitting {e.name} needs {human_size(e.size)} of temporary space in "
-                           f"{tmpdir}, only {human_size(free)} free. Use NTFS instead of FAT32, "
-                           f"or set TMPDIR to a larger location.")
+            raise UsbError(_("splitting %s needs %s of temporary space in "
+                             "%s, only %s free. Use NTFS instead of FAT32, "
+                             "or set TMPDIR to a larger location.")
+                           % (e.name, human_size(e.size), tmpdir, human_size(free)))
         if log:
             log(f"Splitting '{e.name}' ({human_size(e.size)}) for FAT32...")
         tmp_wim = os.path.join(tmpdir, e.name)
         reader.extract(e, tmp_wim, progress=progress, cancel=cancel)
         swm = os.path.splitext(target)[0] + ".swm"
         if emitter:
-            emitter.status("Splitting install.wim for FAT32...")
+            emitter.status(_("Splitting install.wim for FAT32..."))
         wimmod.split(tmp_wim, swm, 4000, log=log, cancel=cancel)
         if log:
             parts = sorted(p for p in os.listdir(os.path.dirname(swm)) if p.lower().endswith(".swm"))

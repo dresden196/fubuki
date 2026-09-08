@@ -15,6 +15,8 @@ import subprocess
 
 from .util import UsbError, Cancelled, MB, human_size, sync_device, run
 
+from .i18n import _
+
 MAGIC = [
     (b"\x1f\x8b", "gzip"),
     (b"BZh", "bzip2"),
@@ -45,7 +47,7 @@ def vhd_footer_size(path):
         return 0
     disk_type = struct.unpack(">I", foot[60:64])[0]
     if disk_type != 2:   # 2 = fixed; dynamic/differencing need conversion
-        raise UsbError("only fixed-size VHD images can be written; convert dynamic VHD/VHDX with qemu-img first")
+        raise UsbError(_("only fixed-size VHD images can be written; convert dynamic VHD/VHDX with qemu-img first"))
     return size - 512
 
 
@@ -85,7 +87,7 @@ def write_image(image_path, dev, emitter=None, cancel=None, log=None, chunk=4 * 
     disk_size = int(open(f"/sys/class/block/{os.path.basename(os.path.realpath(dev))}/size").read()) * 512
     src, expected = open_stream(image_path)
     if expected and expected > disk_size:
-        raise UsbError(f"image is {human_size(expected)} but the drive holds only {human_size(disk_size)}")
+        raise UsbError(_("image is %s but the drive holds only %s") % (human_size(expected), human_size(disk_size)))
     if log:
         log(f"Writing {os.path.basename(image_path)}" + (f" ({human_size(expected)})" if expected else "") + f" to {dev}")
     fd = os.open(dev, os.O_WRONLY | os.O_DIRECT if False else os.O_WRONLY)
@@ -106,7 +108,7 @@ def write_image(image_path, dev, emitter=None, cancel=None, log=None, chunk=4 * 
             if len(buf) % 512:
                 buf = buf + bytes(512 - len(buf) % 512)
             if written + len(buf) > disk_size:
-                raise UsbError("image is larger than the drive")
+                raise UsbError(_("image is larger than the drive"))
             view = memoryview(buf)
             while view:
                 n = os.write(fd, view)
@@ -151,7 +153,7 @@ def _verify(image_path, dev, length, emitter, cancel, log):
             x = a.read(n)
             y = b.read(n)
             if x != y[:len(x)]:
-                raise UsbError(f"verification failed at offset {done}: the drive does not hold what was written")
+                raise UsbError(_("verification failed at offset %s: the drive does not hold what was written") % done)
             done += n
             if emitter:
                 emitter.progress("verify", done / length)

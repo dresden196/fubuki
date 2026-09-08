@@ -32,13 +32,15 @@ QString enginePath()
     return override.isEmpty() ? QString::fromLatin1(DefaultEngine) : override;
 }
 
-// The two variables the engine reads to run from a source tree. A child
-// started directly inherits them; pkexec strips the environment, so for the
-// privileged engine they are carried across on the command line.
+// The variables the engine reads to run from a source tree, plus the ones
+// gettext uses to pick a language. A child started directly inherits them;
+// pkexec strips the environment, so for the privileged engine they are
+// carried across on the command line.
 QStringList passThroughEnv()
 {
     QStringList out;
-    for (const char *name : {"FUBUKI_LIB", "FUBUKI_PAYLOAD"}) {
+    for (const char *name : {"FUBUKI_LIB", "FUBUKI_PAYLOAD", "FUBUKI_LOCALE_DIR",
+                              "LANGUAGE", "LC_ALL", "LANG"}) {
         if (qEnvironmentVariableIsSet(name)) {
             out << QString::fromLatin1(name) + QLatin1Char('=') + qEnvironmentVariable(name);
         }

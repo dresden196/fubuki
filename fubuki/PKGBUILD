@@ -24,6 +24,7 @@ depends=('python' 'python-pyudev' 'util-linux' 'dosfstools' 'ntfs-3g' 'exfatprog
          # Bad block scan, partition re-read.
          'parted'
          'polkit')
+makedepends=('gettext')
 optdepends=('zstd: writing .zst compressed images')
 source=('io.github.dresden196.fubuki.policy')
 sha256sums=('SKIP')
@@ -38,4 +39,11 @@ package() {
     install -Dm644 "$srcdir/io.github.dresden196.fubuki.policy" \
         "$pkgdir/usr/share/polkit-1/actions/io.github.dresden196.fubuki.policy"
     install -Dm644 "$startdir/PROTOCOL.md" "$pkgdir/usr/share/doc/fubuki/PROTOCOL.md"
+
+    # Status phrases and error messages (fubuki/i18n.py); the log stays English.
+    for po in "$startdir"/po/*/fubuki.po; do
+        lang=$(basename "$(dirname "$po")")
+        install -d "$pkgdir/usr/share/locale/$lang/LC_MESSAGES"
+        msgfmt -o "$pkgdir/usr/share/locale/$lang/LC_MESSAGES/fubuki.mo" "$po"
+    done
 }

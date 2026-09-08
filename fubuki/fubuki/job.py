@@ -15,6 +15,8 @@ from . import bootrec, devices, extract, fs as fsmod, image, layout, linux, moun
 from .udf import open_image
 from .util import (UsbError, Cancelled, human_size, payload_path, sync_device, GB, MB, KB, write_at, read_at)
 
+from .i18n import _
+
 BOOT_TYPES = ("image", "none", "freedos", "syslinux", "grub2", "grub4dos", "uefi_ntfs")
 FS_TYPES = ("fat16", "fat32", "ntfs", "exfat", "ext2", "ext3", "ext4")
 
@@ -91,7 +93,7 @@ def normalize(job):
     j = dict(job)
     j.setdefault("boot_type", "image" if j.get("image") else "none")
     if j["boot_type"] not in BOOT_TYPES:
-        raise UsbError(f"unknown boot type {j['boot_type']}")
+        raise UsbError(_("unknown boot type %s") % j['boot_type'])
     j.setdefault("mode", "iso")
     j.setdefault("wintogo", False)
     j.setdefault("wintogo_index", 1)
@@ -115,19 +117,19 @@ def normalize(job):
     j.setdefault("allow_loop", False)
     j.setdefault("temp_dir", None)
     if j["scheme"] not in ("mbr", "gpt"):
-        raise UsbError("scheme must be mbr or gpt")
+        raise UsbError(_("scheme must be mbr or gpt"))
     if j["target"] not in ("bios", "uefi", "dual"):
-        raise UsbError("target must be bios, uefi or dual")
+        raise UsbError(_("target must be bios, uefi or dual"))
     if j["fs"] not in FS_TYPES:
-        raise UsbError(f"unsupported file system {j['fs']}")
+        raise UsbError(_("unsupported file system %s") % j['fs'])
     if j["boot_type"] == "image" and not j.get("image"):
-        raise UsbError("no image given")
+        raise UsbError(_("no image given"))
     if not j.get("device"):
-        raise UsbError("no device given")
+        raise UsbError(_("no device given"))
     if j["scheme"] == "gpt" and j["target"] == "bios":
-        raise UsbError("GPT needs a UEFI target")
+        raise UsbError(_("GPT needs a UEFI target"))
     if j["boot_type"] == "uefi_ntfs" and j["fs"] not in ("ntfs", "exfat"):
-        raise UsbError("UEFI:NTFS needs an NTFS or exFAT main partition")
+        raise UsbError(_("UEFI:NTFS needs an NTFS or exFAT main partition"))
     return j
 
 
@@ -139,12 +141,12 @@ def run_job(job, emitter, cancel=None):
     disk = devices.find_disk(dev)
     if disk is None:
         if os.path.exists(dev) and devices.is_system_disk(dev):
-            raise UsbError(f"{dev} holds the running system; refusing to write it")
-        raise UsbError(f"{dev} is not a disk")
+            raise UsbError(_("%s holds the running system; refusing to write it") % dev)
+        raise UsbError(_("%s is not a disk") % dev)
     if disk["kind"] == "internal" and not j["allow_internal"]:
-        raise UsbError(f"{dev} is an internal drive; refusing to write it")
+        raise UsbError(_("%s is an internal drive; refusing to write it") % dev)
     if disk["kind"] == "loop" and not j["allow_loop"]:
-        raise UsbError(f"{dev} is a loop device; refusing to write it")
+        raise UsbError(_("%s is a loop device; refusing to write it") % dev)
     disk_size, sector = disk["size"], disk["sector_size"]
     log(f"Device: {disk['display']} ({dev}), {human_size(disk_size)}, {sector}-byte sectors, {disk['kind']}")
     if disk["kind"] == "internal":
@@ -153,25 +155,25 @@ def run_job(job, emitter, cancel=None):
     report = None
     reader = None
     if j["boot_type"] == "image":
-        prog.phase("scan", "Scanning image...")
+        prog.phase("scan", _("Scanning image..."))
         report = image.probe(j["image"], log=log)
         log(f"Image: {report['name']} ({report['size_human']}), label '{report['label']}'")
         if j["mode"] == "dd" and not report["is_bootable_img"] and report["is_iso"]:
-            raise UsbError("this ISO is not a hybrid image and cannot be written in DD mode")
+            raise UsbError(_("this ISO is not a hybrid image and cannot be written in DD mode"))
         if j["mode"] == "iso" and not report["is_iso"]:
             j["mode"] = "dd"
         if j["wintogo"] and not report["wininst"]:
-            raise UsbError("Windows To Go needs an image with sources/install.wim")
+            raise UsbError(_("Windows To Go needs an image with sources/install.wim"))
         if j["wintogo"] and j["fs"] != "ntfs":
-            raise UsbError("Windows To Go needs NTFS")
+            raise UsbError(_("Windows To Go needs NTFS"))
         if j["mode"] == "iso" and report["needs_ntfs"] and j["fs"] in ("fat16", "fat32"):
-            raise UsbError("this image has files over 4 GB that cannot be split; use NTFS or exFAT")
+            raise UsbError(_("this image has files over 4 GB that cannot be split; use NTFS or exFAT"))
         if j["persistence_size"] and not report["supports_persistence"]:
-            raise UsbError("this image does not support a persistent partition")
+            raise UsbError(_("this image does not support a persistent partition"))
         if j["mode"] == "iso" and j["fs"] in ("fat16", "fat32") and report["has_4gb_file"] and not report["wininst"]:
-            raise UsbError("this image has files over 4 GB; FAT32 cannot hold them, use NTFS or exFAT")
+            raise UsbError(_("this image has files over 4 GB; FAT32 cannot hold them, use NTFS or exFAT"))
         if j["mode"] == "iso" and report["projected_size"] > disk_size:
-            raise UsbError(f"the image needs {human_size(report['projected_size'])} but the drive has {human_size(disk_size)}")
+            raise UsbError(_("the image needs %s but the drive has %s") % (human_size(report['projected_size']), human_size(disk_size)))
 
     dd_mode = j["boot_type"] == "image" and j["mode"] == "dd"
     bootable = j["boot_type"] != "none"
@@ -223,18 +225,18 @@ def run_job(job, emitter, cancel=None):
                 _bad_blocks(dev, j["bad_blocks"], prog, cancel, log)
 
             if dd_mode:
-                prog.phase("write", "Writing image...")
+                prog.phase("write", _("Writing image..."))
                 writer.write_image(j["image"], dev, emitter=prog, cancel=cancel, log=log, verify=j["verify"])
-                prog.phase("finalize", "Finalizing...")
+                prog.phase("finalize", _("Finalizing..."))
                 sync_device(dev)
                 return {"ok": True}
             if j["boot_type"] == "none" and j["zero_full"]:
-                prog.phase("write", "Zeroing drive...")
+                prog.phase("write", _("Zeroing drive..."))
                 writer.zero_drive(dev, emitter=prog, cancel=cancel, log=log, full=True)
                 return {"ok": True}
 
             # ---- partition
-            prog.phase("partition", "Creating partition table...")
+            prog.phase("partition", _("Creating partition table..."))
             layout.wipe_disk_signatures(dev, disk_size, sector, log)
             cluster = j["cluster_size"] or 0
             parts = layout.plan(disk_size, sector, j["scheme"], j["fs"], bootable, extras,
@@ -259,7 +261,7 @@ def run_job(job, emitter, cancel=None):
                 fsmod.set_label(p.device, "fat32", "FUBUKI_BOOT")
 
             # ---- format
-            prog.phase("format", "Formatting...")
+            prog.phase("format", _("Formatting..."))
             if "persistence" in by_role:
                 p = by_role["persistence"]
                 kind = "casper" if report and report["uses_casper"] else "live"
@@ -280,7 +282,7 @@ def run_job(job, emitter, cancel=None):
                 cancel.check()
 
             # ---- boot records
-            prog.phase("bootrec", "Writing boot records...")
+            prog.phase("bootrec", _("Writing boot records..."))
             is_reactos = j["boot_type"] == "image" and bool(report["reactos_path"]) and not report["has_syslinux"]
             uses_syslinux = j["boot_type"] == "syslinux" or is_reactos or (
                 j["boot_type"] == "image" and report["has_syslinux"] and not (is_windows and j["target"] == "dual"))
@@ -316,7 +318,7 @@ def run_job(job, emitter, cancel=None):
                                   drive_id=0x81 if needs_masquerading and mbr_kind == "rufus" else 0x80)
 
             # ---- content
-            prog.phase("copy", "Copying files..." if j["boot_type"] == "image" else "Preparing volume...")
+            prog.phase("copy", _("Copying files...") if j["boot_type"] == "image" else _("Preparing volume..."))
             main_mount = mountctl.mount_dir_for(dev, "main")
             modified = []
             if j["boot_type"] == "image" and j["wintogo"]:
@@ -328,7 +330,7 @@ def run_job(job, emitter, cancel=None):
                            "partition_guid": uuids.get(by_role["esp"].device), "disk_guid": table.get("id"),
                            "main_partition_guid": uuids.get(main.device)}
                     if not all(esp.values()):
-                        raise UsbError("could not read the partition GUIDs back from the new table")
+                        raise UsbError(_("could not read the partition GUIDs back from the new table"))
                     mountctl.mount(esp["device"], "fat32", esp["mount"], log)
                 try:
                     _windows_to_go(j, report, main, main_mount, prog, cancel, log, esp)
@@ -378,7 +380,7 @@ def run_job(job, emitter, cancel=None):
                 windows.setup_winpe(main_mount, report, log)
 
             # ---- Windows customization
-            prog.phase("patch", "Applying customization..." if is_windows else "Finalizing files...")
+            prog.phase("patch", _("Applying customization...") if is_windows else _("Finalizing files..."))
             if j["boot_type"] == "image" and is_windows and j["windows_options"]:
                 modified += windows.apply_customization(main_mount, report, j["windows_options"], j["username"],
                                                         j["edition_index"], wintogo=j["wintogo"], log=log, emitter=prog,
@@ -388,7 +390,7 @@ def run_job(job, emitter, cancel=None):
             if j["extended_label"] and j["fs"] in ("fat16", "fat32", "exfat", "ntfs"):
                 extract.write_autorun(main_mount, j["label"] or label, log)
 
-            prog.phase("finalize", "Finalizing...")
+            prog.phase("finalize", _("Finalizing..."))
             mountctl.unmount(main_mount, log)
             main_mount = None
             sync_device(dev)
@@ -429,7 +431,7 @@ def _mbr_kind(j, report, bootable, is_windows, uses_syslinux, uses_grub2, needs_
 
 
 def _bad_blocks(dev, passes, prog, cancel, log):
-    prog.phase("badblocks", "Checking for bad blocks...")
+    prog.phase("badblocks", _("Checking for bad blocks..."))
     patterns = ["0xaa", "0x55", "0xff", "0x00"][:max(1, min(4, passes))]
     cmd = ["badblocks", "-w", "-s", "-b", "4096"]
     for p in patterns:
@@ -460,7 +462,7 @@ def _bad_blocks(dev, passes, prog, cancel, log):
     if cancel and cancel.cancelled:
         raise Cancelled()
     if bad:
-        raise UsbError(f"bad blocks check found {len(bad)} bad block(s); this drive should not be trusted")
+        raise UsbError(_("bad blocks check found %d bad block(s); this drive should not be trusted") % len(bad))
     log("Bad blocks: check completed, 0 bad blocks found")
     # The destructive test wrote patterns over the whole drive: clear again.
     layout.wipe_disk_signatures(dev, int(open(f"/sys/class/block/{os.path.basename(dev)}/size").read()) * 512, 512, log)
@@ -473,9 +475,10 @@ def _windows_to_go(j, report, main, main_mount, prog, cancel, log, esp=None):
     try:
         free = shutil.disk_usage(tmpdir).free
         if free < inst["size"] + 64 * MB:
-            raise UsbError(f"Windows To Go needs {human_size(inst['size'])} of temporary space in {tmpdir}; "
-                           f"only {human_size(free)} is free (set TMPDIR to a larger location)")
-        prog.status("Extracting install image...")
+            raise UsbError(_("Windows To Go needs %s of temporary space in %s; "
+                             "only %s is free (set TMPDIR to a larger location)")
+                           % (human_size(inst['size']), tmpdir, human_size(free)))
+        prog.status(_("Extracting install image..."))
         with open_image(j["image"]) as reader:
             e = reader.get(inst["entry"])
             wim_tmp = os.path.join(tmpdir, e.name)
@@ -492,7 +495,7 @@ def _windows_to_go(j, report, main, main_mount, prog, cancel, log, esp=None):
                     bcd[key] = os.path.join(tmpdir, f"BCD_{key}")
                     reader.extract(be, bcd[key])
         if "efi" not in bcd or "bios" not in bcd:
-            raise UsbError("image has no BCD template to build the boot store from")
+            raise UsbError(_("image has no BCD template to build the boot store from"))
         index = j["wintogo_index"] or 1
         names = {i["index"]: i["name"] for i in report["win_editions"]}
         log(f"Windows To Go: edition {index} ({names.get(index, '?')})")
