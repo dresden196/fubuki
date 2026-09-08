@@ -10,7 +10,7 @@ import sys
 WANTED = ["mbr_rufus", "mbr_win7", "mbr_msg_rufus", "mbr_zero", "mbr_syslinux", "mbr_gpt_syslinux", "mbr_grub2", "mbr_grub",
           "br_ntfs_0x0", "br_ntfs_0x54", "br_fat32_0x0", "br_fat32_0x52", "br_fat32_0x3f0",
           "br_fat32nt_0x52", "br_fat32nt_0x3f0", "br_fat32nt_0x1800", "br_fat32pe_0x52", "br_fat32pe_0x3f0", "br_fat32pe_0x1800",
-          "br_fat32fd_0x52", "br_fat32fd_0x3f0", "br_fat16_0x0", "br_fat16_0x3e", "br_fat16fd_0x3e", "br_fat12_0x0", "br_fat12_0x3e"]
+          "br_fat32fd_0x52", "br_fat32fd_0x3f0", "br_fat32kos_0x52", "br_fat32ros_0x52", "br_fat32ros_0x3f0", "br_fat32ros_0x1c00", "br_fat16ros_0x3e", "mbr_reactos", "mbr_kolibri", "br_fat16_0x0", "br_fat16_0x3e", "br_fat16fd_0x3e", "br_fat12_0x0", "br_fat12_0x3e"]
 
 inc = pathlib.Path(sys.argv[1])
 out = ["# Boot record byte arrays ported from ms-sys (GPLv2+, Henrik Carlqvist,",

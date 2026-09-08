@@ -65,7 +65,7 @@ Keys the window needs:
 ## Job object (`write`)
 
     {"device":"/dev/sdb",
-     "boot_type":"image"|"none"|"freedos"|"syslinux"|"grub2"|"uefi_ntfs",
+     "boot_type":"image"|"none"|"freedos"|"syslinux"|"grub2"|"grub4dos"|"uefi_ntfs",
      "image":"/path/to.iso",              # boot_type image
      "mode":"iso"|"dd",                   # image option
      "wintogo":false, "wintogo_index":1,  # Windows To Go with this install.wim index

@@ -12,6 +12,7 @@ Windows. Works on its own from the command line; `fubuki-ui` is the window.
     sudo fubuki write -d /dev/sdb -i win11.iso --wintogo 1 --scheme gpt --target uefi --fs ntfs
     sudo fubuki write -d /dev/sdb -i image.img.xz --mode dd --verify
     sudo fubuki write -d /dev/sdb --boot-type freedos
+    sudo fubuki write -d /dev/sdb --boot-type grub4dos     # then add a menu.lst
 
 The window (`fubuki-ui`) runs `fubuki serve` under pkexec and talks
 the protocol in `PROTOCOL.md`.

@@ -21,6 +21,8 @@ MBR_KINDS = {
     "grub2": bc.MBR_GRUB2_0X0,
     "grub4dos": bc.MBR_GRUB_0X0,
     "msg": bc.MBR_MSG_RUFUS_0X0,        # prints the text stored after the GPT
+    "kolibri": bc.MBR_KOLIBRI_0X0,
+    "reactos": bc.MBR_REACTOS_0X0,
 }
 
 
@@ -121,6 +123,7 @@ def write_pbr(part_dev, fs, variant="std", log=None):
             "nt": (bc.BR_FAT32NT_0X52, bc.BR_FAT32NT_0X3F0, bc.BR_FAT32NT_0X1800),
             "pe": (bc.BR_FAT32PE_0X52, bc.BR_FAT32PE_0X3F0, bc.BR_FAT32PE_0X1800),
             "fd": (bc.BR_FAT32FD_0X52, bc.BR_FAT32FD_0X3F0, None),
+            "kos": (bc.BR_FAT32KOS_0X52, None, None),
         }
         c52, c3f0, c1800 = tables[variant]
         # Primary at sector 0, backup at sector 6: both must agree.
@@ -132,7 +135,8 @@ def write_pbr(part_dev, fs, variant="std", log=None):
                 break
             write_at(part_dev, base + 0x0, bc.BR_FAT32_0X0)
             write_at(part_dev, base + 0x52, c52)
-            write_at(part_dev, base + 0x3F0, c3f0)
+            if c3f0 is not None:
+                write_at(part_dev, base + 0x3F0, c3f0)
             if c1800 is not None:
                 write_at(part_dev, base + 0x1800, c1800)
             # BIOS drive number: the FAT32 BPB keeps it at 0x40.

@@ -28,13 +28,23 @@ def syslinux_cfg_dir(report):
     return os.path.dirname(cfgs[0]).strip("/") if cfgs else ""
 
 
-def install_syslinux(part_dev, mount_dir, report, fs, log=None, embedded=False):
+def install_syslinux(part_dev, mount_dir, report, fs, log=None, embedded=False, reactos_path=None):
     """Install ldlinux.sys into the config directory and write Syslinux's
-    volume boot record. Works on FAT, NTFS and ext through extlinux."""
+    volume boot record. Works on FAT, NTFS and ext through extlinux.
+
+    reactos_path: a ReactOS image has no Syslinux of its own; FreeLoader is
+    started as a multiboot kernel through mboot.c32 from a one-entry config."""
     require_tool("extlinux", "syslinux")
-    cfg_dir = "" if embedded else syslinux_cfg_dir(report)
+    cfg_dir = "" if (embedded or reactos_path) else syslinux_cfg_dir(report)
     target_dir = os.path.join(mount_dir, cfg_dir) if cfg_dir else mount_dir
     os.makedirs(target_dir, exist_ok=True)
+    if reactos_path:
+        for m in ("mboot.c32", "libcom32.c32"):
+            shutil.copy2(os.path.join(SYSLINUX_LIB, m), os.path.join(mount_dir, m))
+        with open(os.path.join(mount_dir, "syslinux.cfg"), "w") as f:
+            f.write(f"DEFAULT ReactOS\nLABEL ReactOS\n  KERNEL mboot.c32\n  APPEND {reactos_path}\n")
+        if log:
+            log(f"Setting up ReactOS: mboot.c32 chain to {reactos_path}")
 
     # Syslinux only reads syslinux.cfg; an ISO that has isolinux.cfg alone
     # gets a one-line syslinux.cfg that chains to it.
@@ -193,5 +203,15 @@ def _dos_keyboard():
             "cz": "cz", "hu": "hu", "ru": "ru", "tr": "tr", "gr": "gk", "ca": "cf", "latam": "la"}.get(layout, "us")
 
 
-def install_grub4dos(mount_dir, log=None):
-    raise UsbError("Grub4DOS is not supported")
+def install_grub4dos(disk_dev, mount_dir, first_partition_offset, from_image, log=None):
+    """Grub4DOS: its MBR code in sector 0 (written by the caller), the rest
+    of grldr.mbr right after it, and grldr in the root unless the image
+    brought its own. Rufus does the same from the same 0.4.6a release."""
+    from .bootrec import write_sbr
+    with open(payload_path("grub4dos", "grldr.mbr"), "rb") as f:
+        mbr_rest = f.read()[512:]
+    write_sbr(disk_dev, mbr_rest, 512, first_partition_offset, log)
+    if not from_image:
+        shutil.copy2(payload_path("grub4dos", "grldr"), os.path.join(mount_dir, "grldr"))
+        if log:
+            log("Installed grldr (Grub4DOS 0.4.6a); add a menu.lst to the root of the drive")

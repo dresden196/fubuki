@@ -15,7 +15,7 @@ from . import bootrec, devices, extract, fs as fsmod, image, layout, linux, moun
 from .udf import open_image
 from .util import (UsbError, Cancelled, human_size, payload_path, sync_device, GB, MB, KB, write_at, read_at)
 
-BOOT_TYPES = ("image", "none", "freedos", "syslinux", "grub2", "uefi_ntfs")
+BOOT_TYPES = ("image", "none", "freedos", "syslinux", "grub2", "grub4dos", "uefi_ntfs")
 FS_TYPES = ("fat16", "fat32", "ntfs", "exfat", "ext2", "ext3", "ext4")
 
 # Text for the "you booted UEFI-only media in BIOS mode"
@@ -281,10 +281,13 @@ def run_job(job, emitter, cancel=None):
 
             # ---- boot records
             prog.phase("bootrec", "Writing boot records...")
-            uses_syslinux = j["boot_type"] == "syslinux" or (
+            is_reactos = j["boot_type"] == "image" and bool(report["reactos_path"]) and not report["has_syslinux"]
+            uses_syslinux = j["boot_type"] == "syslinux" or is_reactos or (
                 j["boot_type"] == "image" and report["has_syslinux"] and not (is_windows and j["target"] == "dual"))
-            uses_grub2 = not uses_syslinux and (j["boot_type"] == "grub2" or (j["boot_type"] == "image" and report["has_grub2"]))
-            mbr_kind = _mbr_kind(j, report, bootable, is_windows, uses_syslinux, uses_grub2, needs_masquerading)
+            uses_grub4dos = not uses_syslinux and (j["boot_type"] == "grub4dos" or (j["boot_type"] == "image" and report["has_grub4dos"]))
+            uses_grub2 = not uses_syslinux and not uses_grub4dos and (
+                j["boot_type"] == "grub2" or (j["boot_type"] == "image" and report["has_grub2"]))
+            mbr_kind = _mbr_kind(j, report, bootable, is_windows, uses_syslinux, uses_grub2, needs_masquerading, uses_grub4dos)
             if j["scheme"] == "mbr":
                 bootrec.fix_mbr_entries(dev, parts.index(main), j["fs"],
                                         (0x81 if needs_masquerading else 0x80) if (bootable and j["target"] != "uefi") else None, log)
@@ -296,6 +299,8 @@ def run_job(job, emitter, cancel=None):
             if bootable and j["target"] != "uefi" and not uses_syslinux and not uses_grub2 and j["boot_type"] != "uefi_ntfs":
                 if j["boot_type"] == "freedos":
                     pbr_variant = "fd"
+                elif report and report["has_kolibrios"] and j["fs"] == "fat32":
+                    pbr_variant = "kos"
                 elif report and report["has_bootmgr"]:
                     pbr_variant = "pe"
                 elif report and report["winpe"]:
@@ -350,7 +355,10 @@ def run_job(job, emitter, cancel=None):
             if bootable and j["target"] != "uefi" and not j["wintogo"]:
                 if uses_syslinux:
                     linux.install_syslinux(main.device, main_mount, report or {"syslinux_cfgs": []}, j["fs"], log,
-                                           embedded=(j["boot_type"] == "syslinux"))
+                                           embedded=(j["boot_type"] == "syslinux"),
+                                           reactos_path=(report["reactos_path"] if is_reactos else None))
+                elif uses_grub4dos:
+                    linux.install_grub4dos(dev, main_mount, parts[0].offset, from_image=(j["boot_type"] == "image"), log=log)
                 elif uses_grub2:
                     linux.install_grub2(dev, main_mount, report, log)
             if j["boot_type"] == "image" and is_windows and not j["wintogo"]:
@@ -388,7 +396,7 @@ def run_job(job, emitter, cancel=None):
             sync_device(dev)
 
 
-def _mbr_kind(j, report, bootable, is_windows, uses_syslinux, uses_grub2, needs_masquerading):
+def _mbr_kind(j, report, bootable, is_windows, uses_syslinux, uses_grub2, needs_masquerading, uses_grub4dos=False):
     if j["scheme"] == "gpt":
         return "msg" if bootable else "zero"
     if j["boot_type"] == "image" and is_windows and j["target"] == "dual":
@@ -399,8 +407,10 @@ def _mbr_kind(j, report, bootable, is_windows, uses_syslinux, uses_grub2, needs_
         return "syslinux"
     if uses_grub2:
         return None   # grub-install writes boot.img + core.img itself
+    if uses_grub4dos:
+        return "grub4dos"
     if j["boot_type"] == "image" and report and report["has_kolibrios"] and j["fs"] in ("fat16", "fat32"):
-        return "win7"
+        return "kolibri"
     if needs_masquerading or j["rufus_mbr"]:
         return "rufus"
     return "win7"

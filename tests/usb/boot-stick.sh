@@ -16,6 +16,10 @@ QMP="$OUT/qmp-stickboot.sock"
 LOG="$OUT/console-stickboot-$MODE.log"
 rm -f "$QMP" "$LOG"
 
+# FUBUKI_BOOT_BUS=sata attaches the image as a SATA disk instead of a USB
+# stick, to tell a guest OS's USB-boot limitation from a bad boot chain.
+bus_args=(-device qemu-xhci,id=xhci -device usb-storage,bus=xhci.0,drive=stick,removable=on)
+[[ "${FUBUKI_BOOT_BUS:-usb}" == "sata" ]] && bus_args=(-device ide-hd,drive=stick,bootindex=0)
 SNAPSHOT=",snapshot=on"
 [[ -n "${FUBUKI_STICK_PERSIST:-}" ]] && SNAPSHOT=""
 fw_args=()
@@ -28,7 +32,7 @@ fi
 qemu-system-x86_64 -enable-kvm -machine q35 -cpu host -smp 4 -m "${FUBUKI_BOOT_MEM:-3G}" \
     "${fw_args[@]}" \
     -drive file="$STICK",if=none,id=stick,format=raw,file.locking=off$SNAPSHOT \
-    -device qemu-xhci,id=xhci -device usb-storage,bus=xhci.0,drive=stick,removable=on \
+    "${bus_args[@]}" \
     -boot menu=off \
     -netdev user,id=net0 -device e1000,netdev=net0 \
     -qmp "unix:$QMP,server,nowait" \

@@ -18,7 +18,11 @@ UEFI), Ubuntu DD with verify, Windows 11 on NTFS via UEFI:NTFS and on FAT32
 with a split install.wim (BIOS and UEFI), a silent Windows 11 install carried
 through to the desktop on a machine with no TPM, Windows To Go on MBR (BIOS
 and UEFI) and on GPT with an ESP (UEFI), an archiso-based live ISO through
-Syslinux (BIOS and UEFI), FreeDOS. On a physical 64 GB stick handed to QEMU
+Syslinux (BIOS and UEFI), FreeDOS, KolibriOS (to its desktop), a Grub4DOS
+stick (to the grub> prompt). ReactOS 0.4.15's BootCD boots FreeLoader and the
+kernel through Syslinux's mboot chain, the same way Rufus does, and then stops
+with 0x7B: that image cannot mount a disk partition as its boot device, on USB
+or SATA alike. On a physical 64 GB stick handed to QEMU
 over USB passthrough (`tests/usb/boot-real.sh`): Windows 11 on NTFS boots
 under UEFI and under enforcing Secure Boot with Microsoft's certificates
 enrolled; an archiso live image written in ISO mode boots under BIOS
