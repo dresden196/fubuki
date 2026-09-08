@@ -218,7 +218,21 @@ def _scan(reader, rep, log):
     rep["efi_boot_files"] = efi_files
     rep["projected_size"] = int(total_blocks * 2048 * 1.01)
     rep["is_windows"] = rep["has_bootmgr"] or rep["has_bootmgr_efi"] or bool(rep["wininst"])
-    rep["uses_minint"] = any("/minint/" in p for p in rep["winpe"])
+    # Rufus reads txtsetup.sif's OsLoadOptions to learn whether the media
+    # expects to be booted with /minint (which decides the disk masquerading).
+    rep["uses_minint"] = False
+    for d in ("i386", "amd64", "minint"):
+        e = reader.get(f"{d}/txtsetup.sif")
+        if e:
+            try:
+                txt = reader.read(e, 0, min(e.size, 512 * 1024)).decode("latin-1")
+            except OSError:
+                continue
+            for line in txt.splitlines():
+                if line.strip().lower().startswith("osloadoptions"):
+                    rep["uses_minint"] = "/minint" in line.lower()
+                    break
+            break
     rep["supports_persistence"] = rep["uses_casper"]
 
     # El Torito: note the EFI image even if no /efi/boot tree exists.

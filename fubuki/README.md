@@ -30,6 +30,10 @@ the protocol in `PROTOCOL.md`.
 - Linux ISOs copied as files with config patches (labels, persistence,
   Red Hat `inst.repo`), BIOS boot through GRUB or Syslinux, persistent
   partition for Ubuntu and Debian live media.
+- Windows XP-era setup media: the NT loader installed as BOOTMGR/NTLDR and
+  patched, txtsetup.sif pointed at the stick, the masquerading MBR making the
+  stick disk 1 so Setup installs to the real hard disk. Linux then no longer
+  lists the partition (its MBR parser rejects the 0x81 flag); firmware is fine.
 - Raw images, fixed VHD, and gzip/xz/bzip2/zstd compressed images, with
   optional read-back verification.
 

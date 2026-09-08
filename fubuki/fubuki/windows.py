@@ -242,6 +242,117 @@ def setup_win7_efi(mount_dir, wininst_path_on_target, log=None, cancel=None):
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+# ------------------------------------------------------------------ Windows XP / WinPE 2.x
+
+def setup_winpe(mount_dir, report, log=None):
+    """Windows XP-era setup media (\\i386 with setupldr.bin): a port of
+    Rufus's SetupWinPE. The NT loader becomes \\BOOTMGR, patched to read
+    txtsetup.sif from the stick, and txtsetup.sif learns where the source
+    files are; the masquerading MBR then presents the stick as disk 1, which
+    is what that path says."""
+    pe = {os.path.dirname(x).lower() for x in report.get("winpe", [])}
+    basedirs = ("i386", "amd64", "minint")
+    if "/amd64" in pe and _has_all(report, "amd64"):
+        index = 1
+    elif "/minint" in pe and _has_all(report, "minint"):
+        index = 2
+    else:
+        index = 0
+    basedir = basedirs[index]
+    src_base = basedirs[2 * (index // 2)]     # the loader files are 32-bit even for amd64 media
+    uses_minint = bool(report.get("uses_minint"))
+    if log:
+        log(f"Setting up Windows XP/WinPE boot from \\{basedir}")
+
+    def copy(src_dir, name, dst_name):
+        src = _find(mount_dir, src_dir, name)
+        if not src:
+            raise UsbError(f"{src_dir}\\{name} not found on the media")
+        shutil.copyfile(src, os.path.join(mount_dir, dst_name))
+
+    copy(src_base, "ntdetect.com", "ntdetect.com")
+    if not uses_minint:
+        copy(basedir, "txtsetup.sif", "txtsetup.sif")
+        _insert_section_line(os.path.join(mount_dir, "txtsetup.sif"), "[SetupData]",
+                             'SetupSourceDevice = "\\device\\harddisk1\\partition1"')
+        if log:
+            log("Added SetupSourceDevice to txtsetup.sif")
+    copy(src_base, "setupldr.bin", "BOOTMGR")
+    if "/minint" in pe:
+        if uses_minint:
+            if log:
+                log("Detected \\minint with /minint option: nothing to patch")
+            return
+        if "/i386" not in pe and "/amd64" not in pe:
+            raise UsbError("media has \\minint but no /minint option and no \\i386: unsure how to boot it")
+
+    path = os.path.join(mount_dir, "BOOTMGR")
+    buf = bytearray(open(path, "rb").read())
+    if log:
+        log("Patching BOOTMGR")
+    if len(buf) > 0x2061 and buf[0x2060] == 0x74 and buf[0x2061] == 0x03:
+        buf[0x2060], buf[0x2061] = 0xEB, 0x1A
+        if log:
+            log("  0x00002060: 0x74 0x03 -> 0xEB 0x1A (disable Win2k3 CRC check)")
+    orgs = [b"\\minint\\txtsetup.sif", b"\\minint\\system32\\"]
+    reps = [[b"\\i386\\txtsetup.sif", b"\\i386\\system32\\"], [b"\\amd64\\txtsetup.sif", b"\\amd64\\system32\\"]]
+    i = 1
+    while i < len(buf) - 32:
+        for j, org in enumerate(orgs):
+            n = len(org) - 1
+            if buf[i:i + n].lower() == org[:n].lower():
+                rep = reps[min(index, 1)][j]
+                buf[i:i + len(rep) + 1] = rep + b"\0"
+                if log:
+                    log(f"  0x{i:08X}: '{org.decode()}' -> '{rep.decode()}'")
+                i += max(len(org), len(rep))
+        i += 1
+    if not uses_minint:
+        rdisk, winnt = b"rdisk(0)", b"$win_nt$.~bt"
+        for i in range(len(buf) - 32):
+            if buf[i:i + 7].lower() == rdisk[:7]:
+                buf[i + 6] = ord("1")
+                if log:
+                    log(f"  0x{i:08X}: 'rdisk(0)' -> 'rdisk(1)'")
+            if buf[i:i + 11].lower() == winnt[:11]:
+                nxt = buf[i + len(winnt)]
+                bd = basedir.encode()
+                buf[i:i + len(bd)] = bd
+                buf[i + len(bd)] = nxt
+                buf[i + len(bd) + 1] = 0
+                if log:
+                    log(f"  0x{i:08X}: '$win_nt$.~bt' -> '{basedir}'")
+    with open(path, "wb") as f:
+        f.write(buf)
+    # The NT-era FAT boot sector loads NTLDR by name; setupldr is an NTLDR
+    # and that is the boot sector XP media get. Keep BOOTMGR too.
+    shutil.copyfile(path, os.path.join(mount_dir, "NTLDR"))
+    if log:
+        log("Installed the patched loader as BOOTMGR and NTLDR")
+
+
+def _has_all(report, d):
+    have = {x.lower() for x in report.get("winpe", [])}
+    return all(f"/{d}/{f}" in have for f in ("ntdetect.com", "setupldr.bin", "txtsetup.sif"))
+
+
+def _insert_section_line(path, section, line):
+    """Add `line` right after the `[section]` header of an INI-style file."""
+    with open(path, "rb") as f:
+        data = f.read()
+    text = data.decode("utf-8", "surrogateescape")
+    out, done = [], False
+    for l in text.splitlines(keepends=True):
+        out.append(l)
+        if not done and l.strip().lower() == section.lower():
+            out.append(line + ("\r\n" if l.endswith("\r\n") else "\n"))
+            done = True
+    if not done:
+        raise UsbError(f"{section} not found in {os.path.basename(path)}")
+    with open(path, "wb") as f:
+        f.write("".join(out).encode("utf-8", "surrogateescape"))
+
+
 # ------------------------------------------------------------------ Windows To Go
 
 def _utf16(s):

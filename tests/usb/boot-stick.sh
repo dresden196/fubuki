@@ -18,8 +18,20 @@ rm -f "$QMP" "$LOG"
 
 # FUBUKI_BOOT_BUS=sata attaches the image as a SATA disk instead of a USB
 # stick, to tell a guest OS's USB-boot limitation from a bad boot chain.
-bus_args=(-device qemu-xhci,id=xhci -device usb-storage,bus=xhci.0,drive=stick,removable=on)
+# FUBUKI_USB_CTRL=ehci puts the stick on a USB 2.0 controller: XP has no
+# xHCI driver, so a stick on USB 3.0 is invisible to its kernel.
+if [[ "${FUBUKI_USB_CTRL:-xhci}" == "ehci" ]]; then
+    bus_args=(-device usb-ehci,id=ehci -device usb-storage,bus=ehci.0,drive=stick,removable=on,bootindex=0)
+else
+    bus_args=(-device qemu-xhci,id=xhci -device usb-storage,bus=xhci.0,drive=stick,removable=on,bootindex=0)
+fi
 [[ "${FUBUKI_BOOT_BUS:-usb}" == "sata" ]] && bus_args=(-device ide-hd,drive=stick,bootindex=0)
+# FUBUKI_EXTRA_DISK=1 adds an empty SATA disk (XP setup media expect one).
+extra_args=()
+if [[ -n "${FUBUKI_EXTRA_DISK:-}" ]]; then
+    qemu-img create -f qcow2 "$OUT/stick-extra.qcow2" 20G >/dev/null
+    extra_args=(-drive file="$OUT/stick-extra.qcow2",if=none,id=hd0,format=qcow2 -device ide-hd,drive=hd0,bootindex=1)
+fi
 SNAPSHOT=",snapshot=on"
 [[ -n "${FUBUKI_STICK_PERSIST:-}" ]] && SNAPSHOT=""
 fw_args=()
@@ -29,10 +41,10 @@ if [[ "$MODE" == "uefi" ]]; then
     fw_args=(-drive if=pflash,format=raw,unit=0,readonly=on,file="${OVMF_DIR:-/usr/share/edk2/x64}/OVMF_CODE.4m.fd"
              -drive if=pflash,format=raw,unit=1,file="$VARS")
 fi
-qemu-system-x86_64 -enable-kvm -machine q35 -cpu host -smp 4 -m "${FUBUKI_BOOT_MEM:-3G}" \
+qemu-system-x86_64 -enable-kvm -machine "${FUBUKI_MACHINE:-q35}" -cpu host -smp 4 -m "${FUBUKI_BOOT_MEM:-3G}" \
     "${fw_args[@]}" \
     -drive file="$STICK",if=none,id=stick,format=raw,file.locking=off$SNAPSHOT \
-    "${bus_args[@]}" \
+    "${bus_args[@]}" "${extra_args[@]}" \
     -boot menu=off \
     -netdev user,id=net0 -device e1000,netdev=net0 \
     -qmp "unix:$QMP,server,nowait" \

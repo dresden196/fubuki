@@ -102,9 +102,14 @@ def _is_ntfs(sector):
     return sector[0x03:0x0B] == b"NTFS    "
 
 
-def write_pbr(part_dev, fs, variant="std", log=None):
+def write_pbr(part_dev, fs, variant="std", log=None, drive_id=0x80):
     """variant: 'std' (Windows 9x/plain), 'nt' (NTLDR), 'pe' (BOOTMGR),
-    'fd' (FreeDOS). NTFS always loads BOOTMGR."""
+    'fd' (FreeDOS). NTFS always loads BOOTMGR.
+
+    drive_id is what the boot sector's BPB says the BIOS drive is, and
+    the Microsoft boot sectors trust it over the DL they are handed. Under
+    the masquerading MBR (0x80 and 0x81 swapped) it must be 0x81 so the
+    boot sector still reads the stick."""
     sector_size = _sector_size(part_dev)
     boot = read_at(part_dev, 0, max(512, sector_size))
     if fs == "ntfs":
@@ -140,7 +145,7 @@ def write_pbr(part_dev, fs, variant="std", log=None):
             if c1800 is not None:
                 write_at(part_dev, base + 0x1800, c1800)
             # BIOS drive number: the FAT32 BPB keeps it at 0x40.
-            write_at(part_dev, base + 0x40, b"\x80")
+            write_at(part_dev, base + 0x40, bytes([drive_id]))
         if log:
             log(f"Wrote FAT32 ({variant}) partition boot record")
         return
@@ -150,7 +155,7 @@ def write_pbr(part_dev, fs, variant="std", log=None):
         code = bc.BR_FAT16FD_0X3E if variant == "fd" else bc.BR_FAT16_0X3E
         write_at(part_dev, 0x0, bc.BR_FAT16_0X0)
         write_at(part_dev, 0x3E, code)
-        write_at(part_dev, 0x24, b"\x80")  # drive number in the FAT16 BPB
+        write_at(part_dev, 0x24, bytes([drive_id]))  # drive number in the FAT16 BPB
         if log:
             log(f"Wrote FAT16 ({variant}) partition boot record")
         return

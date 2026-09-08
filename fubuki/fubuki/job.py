@@ -288,9 +288,13 @@ def run_job(job, emitter, cancel=None):
             uses_grub2 = not uses_syslinux and not uses_grub4dos and (
                 j["boot_type"] == "grub2" or (j["boot_type"] == "image" and report["has_grub2"]))
             mbr_kind = _mbr_kind(j, report, bootable, is_windows, uses_syslinux, uses_grub2, needs_masquerading, uses_grub4dos)
+            # The masquerading flag (0x81) makes Linux reject the whole table
+            # and drop the partition nodes, so the job runs with 0x80 and
+            # sets 0x81 as its very last act, after everything is unmounted.
+            masquerade_later = bool(needs_masquerading and bootable and j["target"] != "uefi" and j["scheme"] == "mbr")
             if j["scheme"] == "mbr":
                 bootrec.fix_mbr_entries(dev, parts.index(main), j["fs"],
-                                        (0x81 if needs_masquerading else 0x80) if (bootable and j["target"] != "uefi") else None, log)
+                                        0x80 if (bootable and j["target"] != "uefi") else None, log)
             if mbr_kind:
                 bootrec.write_mbr_code(dev, mbr_kind, log)
             if mbr_kind == "msg":
@@ -308,7 +312,8 @@ def run_job(job, emitter, cancel=None):
                 else:
                     pbr_variant = "std"
             if pbr_variant and j["fs"] in ("fat16", "fat32", "ntfs") and not j["wintogo"]:
-                bootrec.write_pbr(main.device, j["fs"], pbr_variant, log)
+                bootrec.write_pbr(main.device, j["fs"], pbr_variant, log,
+                                  drive_id=0x81 if needs_masquerading and mbr_kind == "rufus" else 0x80)
 
             # ---- content
             prog.phase("copy", "Copying files..." if j["boot_type"] == "image" else "Preparing volume...")
@@ -366,8 +371,11 @@ def run_job(job, emitter, cancel=None):
                     inst = windows._find(main_mount, *report["wininst"][0]["path"].strip("/").split("/"))
                     if inst:
                         windows.setup_win7_efi(main_mount, inst, log, cancel)
-                if j["target"] == "bios" and report["winpe"]:
-                    log("WARNING: Windows XP / WinPE 2.x media is not supported; the drive may not boot")
+
+
+            if j["boot_type"] == "image" and report["winpe"] and j["target"] != "uefi":
+                # XP-era media: no bootmgr, so it is not "Windows" above.
+                windows.setup_winpe(main_mount, report, log)
 
             # ---- Windows customization
             prog.phase("patch", "Applying customization..." if is_windows else "Finalizing files...")
@@ -384,6 +392,10 @@ def run_job(job, emitter, cancel=None):
             mountctl.unmount(main_mount, log)
             main_mount = None
             sync_device(dev)
+            if masquerade_later:
+                bootrec.fix_mbr_entries(dev, parts.index(main), None, 0x81, log)
+                sync_device(dev)
+                log("Note: with the masquerading MBR Linux will no longer show the partition; the BIOS does not mind")
             layout.reread(dev)
             log("Done.")
             return {"ok": True, "label": usb_label}

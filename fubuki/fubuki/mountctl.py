@@ -102,7 +102,9 @@ def mount(part_dev, fs, mount_dir, log=None):
     os.makedirs(mount_dir, exist_ok=True)
     attempts = []
     if fs in ("fat16", "fat32"):
-        attempts.append(["mount", "-t", "vfat", "-o", "rw,umask=000,shortname=mixed,utf8=1,flush", part_dev, mount_dir])
+        # No `flush`: it syncs after every close, and an XP tree is thousands
+        # of small files; the job syncs the whole drive before unmounting.
+        attempts.append(["mount", "-t", "vfat", "-o", "rw,umask=000,shortname=mixed,utf8=1", part_dev, mount_dir])
     elif fs == "exfat":
         attempts.append(["mount", "-t", "exfat", "-o", "rw,umask=000", part_dev, mount_dir])
     elif fs == "ntfs":
