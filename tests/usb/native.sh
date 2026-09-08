@@ -26,7 +26,7 @@ IMG="$OUT/native-$SCN.img"
 rm -f "$IMG"; truncate -s "${FUBUKI_STICK_SIZE:-32G}" "$IMG"
 LOOP=$(losetup -f --show -P "$IMG")
 trap 'losetup -d "$LOOP" 2>/dev/null || true; chown "$CALLER" "$OUT"/* 2>/dev/null || true' EXIT
-export FUBUKI_LIB="$ROOT/fubuki" FUBUKI_PAYLOAD="$ROOT/fubuki/payload" PYTHONDONTWRITEBYTECODE=1
+export FUBUKI_LIB="$ROOT/fubuki" FUBUKI_PAYLOAD="$ROOT/fubuki/payload" PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="$ROOT/fubuki"
 
 case "$SCN" in
     windows-fat32) args=(--image "$IMAGE" --mode iso --scheme mbr --target dual --fs fat32 --windows-option bypass_requirements --windows-option no_online_account) ;;
