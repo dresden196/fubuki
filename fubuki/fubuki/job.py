@@ -138,6 +138,8 @@ def run_job(job, emitter, cancel=None):
     dev = os.path.realpath(j["device"])
     disk = devices.find_disk(dev)
     if disk is None:
+        if os.path.exists(dev) and devices.is_system_disk(dev):
+            raise UsbError(f"{dev} holds the running system; refusing to write it")
         raise UsbError(f"{dev} is not a disk")
     if disk["kind"] == "internal" and not j["allow_internal"]:
         raise UsbError(f"{dev} is an internal drive; refusing to write it")

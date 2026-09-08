@@ -193,6 +193,18 @@ def list_disks(include_usb_hdd=False, include_all=False, include_loop=False):
     return disks
 
 
+def is_system_disk(device):
+    """True when the device (or its parent disk) holds the running system."""
+    name = os.path.basename(os.path.realpath(device))
+    disks = _system_disks(_mounts())
+    if name in disks:
+        return True
+    for d in disks:
+        if os.path.isdir(os.path.join(SYS_BLOCK, d, name)):
+            return True
+    return False
+
+
 def find_disk(device, **kw):
     device = os.path.realpath(device)
     for d in list_disks(include_usb_hdd=True, include_all=True, include_loop=True):
