@@ -223,7 +223,14 @@ def apply(dev, parts, scheme, sector_size, mbr_uefi_marker=False, log=None):
     if log:
         for line in script.rstrip().splitlines():
             log("  sfdisk: " + line)
+    # 255 heads / 63 sectors is what every BIOS assumes and what Windows
+    # writes; the kernel's fake geometry for a USB stick (64/32) makes the
+    # CHS fields in the table disagree with the BIOS, and NT-era boot
+    # sectors, which read by CHS, then read the wrong sectors and hang.
     run(["sfdisk", "-q", "-w", "always", "-W", "always", dev], input=script, log=None)
+    if scheme == "mbr":
+        from .bootrec import fix_mbr_chs
+        fix_mbr_chs(dev, sector_size, log=log)
     reread(dev)
     # Resolve /dev nodes for each partition.
     for i, p in enumerate(parts, 1):

@@ -21,7 +21,8 @@ and UEFI) and on GPT with an ESP (UEFI), an archiso-based live ISO through
 Syslinux (BIOS and UEFI), FreeDOS, KolibriOS (to its desktop), a Grub4DOS
 stick (to the grub> prompt), Windows XP SP3 setup media (text-mode Setup
 loads, through the masquerading MBR and a patched setupldr; XP itself needs
-a machine with USB 2.0 and pre-q35 ACPI, so the bench uses `pc` + EHCI). ReactOS 0.4.15's BootCD boots FreeLoader and the
+a machine with USB 2.0 and pre-q35 ACPI, so the bench uses `pc` + EHCI); the
+same stick's contents copied from a physical 32 GB drive boot the same way. ReactOS 0.4.15's BootCD boots FreeLoader and the
 kernel through Syslinux's mboot chain, the same way Rufus does, and then stops
 with 0x7B: that image cannot mount a disk partition as its boot device, on USB
 or SATA alike. On a physical 64 GB stick handed to QEMU

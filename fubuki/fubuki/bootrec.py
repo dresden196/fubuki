@@ -77,6 +77,39 @@ def fix_mbr_entries(dev, main_index, fs=None, active_id=None, log=None):
     write_at(dev, 0, bytes(mbr))
 
 
+def fix_mbr_chs(dev, sector_size=512, heads=255, spt=63, log=None):
+    """Rewrite the CHS fields of every MBR entry for a 255/63 geometry, the
+    one BIOSes assume. util-linux fills them from the kernel's fake USB
+    geometry (64/32), and NT-era boot sectors, which read by CHS, then
+    address the wrong sectors."""
+    mbr = bytearray(read_at(dev, 0, 512))
+    if mbr[0x1FE:0x200] != b"\x55\xaa":
+        return
+    per_cyl = heads * spt
+
+    def chs(lba):
+        if lba >= 1024 * per_cyl:
+            return bytes([0xFE, 0xFF, 0xFF])
+        c, rem = divmod(lba, per_cyl)
+        h, s = divmod(rem, spt)
+        return bytes([h, ((c >> 2) & 0xC0) | (s + 1), c & 0xFF])
+
+    changed = False
+    for i in range(4):
+        e = 0x1BE + 16 * i
+        if mbr[e + 4] == 0:
+            continue
+        start, size = struct.unpack_from("<II", mbr, e + 8)
+        new = mbr[:e + 1] + chs(start) + mbr[e + 4:e + 5] + chs(start + size - 1) + mbr[e + 8:]
+        if new != mbr:
+            mbr = bytearray(new)
+            changed = True
+    if changed:
+        write_at(dev, 0, bytes(mbr))
+        if log:
+            log(f"Set CHS fields for a {heads}/{spt} geometry")
+
+
 def write_sbr(dev, data, offset, first_partition_offset, log=None):
     """Secondary boot record between the MBR and the first partition:
     GRUB2's core.img, or the text for the protective-message MBR."""
@@ -146,6 +179,9 @@ def write_pbr(part_dev, fs, variant="std", log=None, drive_id=0x80):
                 write_at(part_dev, base + 0x1800, c1800)
             # BIOS drive number: the FAT32 BPB keeps it at 0x40.
             write_at(part_dev, base + 0x40, bytes([drive_id]))
+            # Sectors per track and heads as the BIOS will report them (63/255);
+            # mkfs.fat copied the kernel's fake USB geometry instead.
+            write_at(part_dev, base + 0x18, struct.pack("<HH", 63, 255))
         if log:
             log(f"Wrote FAT32 ({variant}) partition boot record")
         return
@@ -156,6 +192,7 @@ def write_pbr(part_dev, fs, variant="std", log=None, drive_id=0x80):
         write_at(part_dev, 0x0, bc.BR_FAT16_0X0)
         write_at(part_dev, 0x3E, code)
         write_at(part_dev, 0x24, bytes([drive_id]))  # drive number in the FAT16 BPB
+        write_at(part_dev, 0x18, struct.pack("<HH", 63, 255))
         if log:
             log(f"Wrote FAT16 ({variant}) partition boot record")
         return
