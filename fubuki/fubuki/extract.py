@@ -117,6 +117,28 @@ def _safe_name(name, fs):
     return name
 
 
+# Windows ISOs name their files in lowercase in the UDF tree (efi/microsoft/
+# boot/bcd). Windows does not care, but the EfiFs exFAT driver that
+# UEFI:NTFS uses matches names exactly, and bootmgr then cannot find its
+# BCD (0xc0000272). On case-insensitive targets the well-known EFI paths are
+# written in Microsoft's canonical case, which changes nothing else.
+CANONICAL_CASE = {
+    "efi": "EFI", "efi/boot": "EFI/Boot", "efi/microsoft": "EFI/Microsoft", "efi/microsoft/boot": "EFI/Microsoft/Boot",
+    "efi/microsoft/boot/bcd": "EFI/Microsoft/Boot/BCD", "efi/microsoft/boot/fonts": "EFI/Microsoft/Boot/Fonts",
+    "efi/microsoft/boot/resources": "EFI/Microsoft/Boot/Resources", "boot/bcd": "boot/BCD",
+}
+
+
+def _target_parts(path, fs):
+    parts = [_safe_name(x, fs) for x in path.split("/")]
+    if fs in ("fat16", "fat32", "exfat", "ntfs"):
+        for depth in range(1, len(parts) + 1):
+            key = "/".join(parts[:depth]).lower()
+            if key in CANONICAL_CASE:
+                parts[:depth] = CANONICAL_CASE[key].split("/")
+    return parts
+
+
 def extract_iso(reader, report, dest, fs, usb_label, emitter=None, cancel=None, log=None,
                 persistence=False, split_wim=True, temp_dir=None):
     """Copy every file. Returns (modified_files, split_wims) for md5 fixing."""
@@ -137,7 +159,7 @@ def extract_iso(reader, report, dest, fs, usb_label, emitter=None, cancel=None, 
     # Directories first, in path order, so parents exist.
     for path, e in sorted(entries.items(), key=lambda kv: kv[0].lower()):
         if e.is_dir:
-            os.makedirs(os.path.join(dest, *[_safe_name(p, fs) for p in path.split("/")]), exist_ok=True)
+            os.makedirs(os.path.join(dest, *_target_parts(path, fs)), exist_ok=True)
 
     for path, e in sorted(entries.items(), key=lambda kv: kv[0].lower()):
         if e.is_dir:
@@ -145,7 +167,7 @@ def extract_iso(reader, report, dest, fs, usb_label, emitter=None, cancel=None, 
         if cancel:
             cancel.check()
         rel = "/" + path
-        parts = [_safe_name(p, fs) for p in path.split("/")]
+        parts = _target_parts(path, fs)
         target = os.path.join(dest, *parts)
         base = e.name.lower()
         dirname = e.dirname.lower()

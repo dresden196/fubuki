@@ -14,7 +14,7 @@ engine that works on its own.
   an emulated USB stick.
 
 Verified this way, by screenshot: Ubuntu ISO mode with persistence (BIOS and
-UEFI), Ubuntu DD with verify, Windows 11 on NTFS via UEFI:NTFS and on FAT32
+UEFI), Ubuntu DD with verify, Windows 11 on NTFS via UEFI:NTFS, on exFAT, and on FAT32
 with a split install.wim (BIOS and UEFI), a silent Windows 11 install carried
 through to the desktop on a machine with no TPM, Windows To Go on MBR (BIOS
 and UEFI) and on GPT with an ESP (UEFI), an archiso-based live ISO through
