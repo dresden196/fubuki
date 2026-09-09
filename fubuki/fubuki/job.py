@@ -454,7 +454,7 @@ def _bad_blocks(dev, passes, prog, cancel, log):
                 if m:
                     prog.update(float(m.group(1)) / 100.0)
                 buf = ""
-        out, _ = proc.communicate()
+        out, _err = proc.communicate()
         bad = [l for l in out.splitlines() if l.strip().isdigit()]
     finally:
         if cancel:

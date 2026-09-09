@@ -106,7 +106,7 @@ class Udf:
                 fsd_ad = d[248:264]
                 n_maps = struct.unpack_from("<I", d, 268)[0]
                 pos = 440
-                for _ in range(n_maps):
+                for _map in range(n_maps):
                     mtype, mlen = d[pos], d[pos + 1]
                     if mtype == 1:
                         self._maps.append(struct.unpack_from("<H", d, pos + 4)[0])

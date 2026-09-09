@@ -239,7 +239,7 @@ def apply(dev, parts, scheme, sector_size, mbr_uefi_marker=False, log=None):
         p.number = i
         p.device = partition_device(dev, i)
     for p in parts:
-        for _ in range(50):
+        for _try in range(50):
             if os.path.exists(p.device):
                 break
             time.sleep(0.1)

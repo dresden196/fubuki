@@ -130,7 +130,7 @@ def mount(part_dev, fs, mount_dir, log=None):
 
 def unmount(mount_dir, log=None):
     os.sync()
-    for _ in range(10):
+    for _try in range(10):
         r = subprocess.run(["umount", mount_dir], capture_output=True, text=True)
         if r.returncode == 0:
             break

@@ -18,7 +18,8 @@ UEFI), Ubuntu DD with verify, Windows 11 on NTFS via UEFI:NTFS and on FAT32
 with a split install.wim (BIOS and UEFI), a silent Windows 11 install carried
 through to the desktop on a machine with no TPM, Windows To Go on MBR (BIOS
 and UEFI) and on GPT with an ESP (UEFI), an archiso-based live ISO through
-Syslinux (BIOS and UEFI), FreeDOS, KolibriOS (to its desktop), a Grub4DOS
+Syslinux (BIOS and UEFI, on FAT32 and on ext4), FreeDOS (FAT32, and FAT16 on a
+1 GB drive), the destructive bad-blocks scan, KolibriOS (to its desktop), a Grub4DOS
 stick (to the grub> prompt), Windows XP SP3 setup media (text-mode Setup
 loads, through the masquerading MBR and a patched setupldr; XP itself needs
 a machine with USB 2.0 and pre-q35 ACPI, so the bench uses `pc` + EHCI); the
