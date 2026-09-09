@@ -8,3 +8,4 @@ build/
 /fubuki-ui/src/
 /fubuki-ui/pkg/
 *.pkg.tar.zst
+dist/
