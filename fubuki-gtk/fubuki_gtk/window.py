@@ -14,6 +14,21 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Adw, Gio, GLib, Gtk, Pango  # noqa: E402
 
+# libadwaita sets button and drop-down text in bold; the KDE window (and
+# Rufus) use the regular weight, so the two look alike.
+FUBUKI_CSS = b"""
+button label, dropdown label, dropdown > button label, spinbutton text { font-weight: normal; }
+"""
+
+
+def _install_css():
+    from gi.repository import Gdk
+    provider = Gtk.CssProvider()
+    provider.load_from_data(FUBUKI_CSS)
+    display = Gdk.Display.get_default()
+    if display is not None:
+        Gtk.StyleContext.add_provider_for_display(display, provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+
 from . import dialogs  # noqa: E402
 from .engine import human_size  # noqa: E402
 from .i18n import _, fmt, ngettext, pgettext  # noqa: E402
@@ -106,7 +121,8 @@ def check(text, on_toggled, *args):
 
 class FubukiWindow(Adw.ApplicationWindow):
     def __init__(self, app, backend):
-        super().__init__(application=app, title="Fubuki", default_width=740, default_height=1000)
+        _install_css()
+        super().__init__(application=app, title="Fubuki", default_width=740, default_height=860)
         self.backend = backend
         self._updating = False
 
