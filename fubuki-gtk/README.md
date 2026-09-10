@@ -1,7 +1,7 @@
 # fubuki-gtk
 
 The GNOME window for Fubuki: GTK 4 and libadwaita, in Python. It is the
-same tool as `fubuki-ui` (the KDE window) laid out the same way as Rufus,
+same tool as `fubuki-qt` (the KDE window) laid out the same way as Rufus,
 and it drives the same engine over the same protocol (`fubuki/PROTOCOL.md`).
 Everything that looks at a disk or an image and every decision about what
 will boot is the engine's; this window draws what it reports and hands it

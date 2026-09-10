@@ -4,7 +4,11 @@
 # every decision about what will boot lives in fubuki; this draws what
 # the engine reports and hands it a job. A second opinion here would be the
 # one people believed, and the one nobody tested.
-pkgname=fubuki-ui
+pkgname=fubuki-qt
+# fubuki-ui was this package's name up to 0.2.1.
+provides=('fubuki-ui')
+conflicts=('fubuki-ui')
+replaces=('fubuki-ui')
 pkgver=0.2.1
 pkgrel=1
 pkgdesc="Fubuki bootable USB writer: the window"
@@ -29,6 +33,7 @@ package() {
     # The icon (hicolor/scalable/apps/fubuki.svg) comes with the engine
     # package, which both front-ends depend on.
     DESTDIR="$pkgdir" cmake --install "$srcdir/build"
+    ln -s fubuki-qt "$pkgdir/usr/bin/fubuki-ui"
     install -Dm644 "$startdir/io.github.dresden196.fubuki.desktop" \
         "$pkgdir/usr/share/applications/io.github.dresden196.fubuki.desktop"
 }

@@ -5,8 +5,8 @@ build/
 # makepkg leftovers
 /fubuki/src/
 /fubuki/pkg/
-/fubuki-ui/src/
-/fubuki-ui/pkg/
+/fubuki-qt/src/
+/fubuki-qt/pkg/
 /fubuki-gtk/src/
 /fubuki-gtk/pkg/
 *.pkg.tar.zst

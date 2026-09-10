@@ -11,7 +11,7 @@ gettext.translation(), given languages=None, resolves the language itself
 from LANGUAGE, then LC_ALL, then LC_MESSAGES, then LANG -- the same order as
 the C library. pkexec starts the privileged engine with an empty environment,
 so the window passes LANGUAGE (and LC_ALL/LANG) through explicitly on the
-command line; see passThroughEnv() in fubuki-ui's backend.cpp.
+command line; see passThroughEnv() in fubuki-qt's backend.cpp.
 """
 
 import gettext

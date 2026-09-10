@@ -1,7 +1,7 @@
 # fubuki (engine)
 
 Makes bootable USB drives from ISO and disk images, the way Rufus does on
-Windows. Works on its own from the command line; `fubuki-ui` is the window.
+Windows. Works on its own from the command line; `fubuki-qt` is the window.
 
     fubuki devices                       # drives it is willing to write
     fubuki probe some.iso                # what the image is and how it boots
@@ -14,7 +14,7 @@ Windows. Works on its own from the command line; `fubuki-ui` is the window.
     sudo fubuki write -d /dev/sdb --boot-type freedos
     sudo fubuki write -d /dev/sdb --boot-type grub4dos     # then add a menu.lst
 
-The window (`fubuki-ui`) runs `fubuki serve` under pkexec and talks
+The window (`fubuki-qt`) runs `fubuki serve` under pkexec and talks
 the protocol in `PROTOCOL.md`.
 
 ## What it does that a plain `dd` cannot

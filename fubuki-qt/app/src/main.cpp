@@ -4,6 +4,7 @@
 #include <KLocalizedString>
 
 #include <QFileInfo>
+#include <QIcon>
 #include <QApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
@@ -18,11 +19,14 @@ int main(int argc, char *argv[])
     // The application name doubles as the QSettings file the Windows dialog
     // remembers its choices in, so it is the package name rather than the
     // engine's.
-    app.setApplicationName(QStringLiteral("fubuki-ui"));
+    app.setApplicationName(QStringLiteral("fubuki-qt"));
     app.setOrganizationName(QStringLiteral("Fubuki"));
     app.setDesktopFileName(QStringLiteral("io.github.dresden196.fubuki"));
+    // The title bar and task manager want the icon from the window itself
+    // when the desktop file is not where the shell expects it (AppImage).
+    app.setWindowIcon(QIcon::fromTheme(QStringLiteral("fubuki")));
     QQuickStyle::setStyle(QStringLiteral("org.kde.desktop"));
-    KLocalizedString::setApplicationDomain(QByteArrayLiteral("fubuki-ui"));
+    KLocalizedString::setApplicationDomain(QByteArrayLiteral("fubuki-qt"));
 
     // An image given on the command line -- an ISO opened with the writer
     // from a file manager. Handed to the window as the boot selection, and

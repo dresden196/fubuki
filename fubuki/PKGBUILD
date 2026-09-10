@@ -1,6 +1,6 @@
 # Maintainer: Dresden Wildey <dresden196@gmail.com>
 #
-# The engine. Everything that touches a disk is here; the window (fubuki-ui)
+# The engine. Everything that touches a disk is here; the window (fubuki-qt)
 # only draws what this reports and hands it a job.
 #
 # The design and the boot payloads come from Rufus (GPLv3, Pete Batard):
@@ -38,7 +38,7 @@ package() {
     install -Dm644 "$srcdir/io.github.dresden196.fubuki.policy" \
         "$pkgdir/usr/share/polkit-1/actions/io.github.dresden196.fubuki.policy"
     # The app mark lives here rather than with either window: both front-ends
-    # (fubuki-ui, fubuki-gtk) depend on this package, and two packages owning
+    # (fubuki-qt, fubuki-gtk) depend on this package, and two packages owning
     # the same hicolor path would conflict.
     install -Dm644 "$startdir/icons/fubuki.svg" \
         "$pkgdir/usr/share/icons/hicolor/scalable/apps/fubuki.svg"

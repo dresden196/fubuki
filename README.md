@@ -23,25 +23,28 @@ systems, DOS, and raw disk images. It does the things Rufus does that a plain
 - **FreeDOS**, KolibriOS, Grub4DOS, and plain UEFI:NTFS drives.
 - Compressed images (gzip, xz, bzip2, zstd), fixed VHD, checksums, a
   destructive bad-blocks scan.
-- A KDE window (`fubuki-ui`) and a GNOME window (`fubuki-gtk`) over one
+- A KDE window (`fubuki-qt`) and a GNOME window (`fubuki-gtk`) over one
   engine with a command line (`fubuki`). Twelve languages.
 
 ## Install
 
 Arch Linux and derivatives, from the AUR:
 
-    yay -S fubuki fubuki-ui      # KDE
+    yay -S fubuki fubuki-qt      # KDE (was fubuki-ui)
     yay -S fubuki fubuki-gtk     # GNOME
 
-Or from this tree: `makepkg -si` in `fubuki/`, then in `fubuki-ui/` or
+Or from this tree: `makepkg -si` in `fubuki/`, then in `fubuki-qt/` or
 `fubuki-gtk/`. `./release.sh` builds all packages into `dist/`.
 
-Any distribution, no root, with the GNOME window:
+Any distribution, no root, either window:
 
-- **Flatpak**: `flatpak-builder --user --install build-dir packaging/flatpak/io.github.dresden196.fubuki.yml`
-  (every tool the engine needs is built into it).
-- **AppImage**: `packaging/appimage/build.sh` on Arch, or the `Fubuki-*.AppImage`
-  from a release; make it executable and run it.
+- **Flatpak**: `io.github.dresden196.fubuki` is the KDE window on the KDE
+  runtime, `io.github.dresden196.fubuki.gtk` the GNOME window on the GNOME
+  runtime; both manifests are in `packaging/flatpak/` and every tool the
+  engine needs is built into them. Bundles are attached to each release.
+- **AppImage**: `Fubuki-qt-*.AppImage` and `Fubuki-gtk-*.AppImage` from a
+  release (`packaging/appimage/build.sh` builds them on Arch); make one
+  executable and run it.
 
 Both reach the drive through udisks2, so there is no `pkexec`: the desktop's
 own polkit prompt appears once when the drive is opened.

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(fubuki-ui VERSION 0.2.1)
+project(fubuki-qt VERSION 0.2.1)
 
 find_package(ECM 6.0 REQUIRED NO_MODULE)
 set(CMAKE_MODULE_PATH ${ECM_MODULE_PATH})
@@ -12,7 +12,7 @@ find_package(KF6 6.0 REQUIRED COMPONENTS I18n Kirigami)
 
 add_subdirectory(src)
 
-# The .po files live at fubuki-ui/po, a sibling of this directory, so that
+# The .po files live at fubuki-qt/po, a sibling of this directory, so that
 # a checkout can be pointed at with -S app the way the PKGBUILD does. Turns
-# each po/<lang>/fubuki-ui.po into share/locale/<lang>/LC_MESSAGES/fubuki-ui.mo.
+# each po/<lang>/fubuki-qt.po into share/locale/<lang>/LC_MESSAGES/fubuki-qt.mo.
 ki18n_install(../po)

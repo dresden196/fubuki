@@ -1,6 +1,6 @@
 # Maintainer: Dresden Wildey <dresden196@gmail.com>
 #
-# The USB writer's GNOME window. Like fubuki-ui (the KDE one) it draws what
+# The USB writer's GNOME window. Like fubuki-qt (the KDE one) it draws what
 # the fubuki engine reports and hands it a job; the two front-ends share
 # the engine package and may be installed side by side.
 pkgname=fubuki-gtk

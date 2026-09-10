@@ -1,6 +1,6 @@
 """Fubuki: a bootable USB writer for Linux.
 
-Everything that touches a disk lives here. The window (fubuki-ui) only
+Everything that touches a disk lives here. The window (fubuki-qt) only
 draws what this package reports and hands it a job to run.
 
 The design and most of the domain knowledge come from Rufus

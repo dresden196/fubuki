@@ -4,7 +4,7 @@
 # from this decade. No root: with $APPIMAGE set the engine reaches drives
 # through udisks2 (see fubuki/fubuki/backend.py), which every desktop has.
 #
-#   packaging/appimage/build.sh          -> dist/Fubuki-<version>-x86_64.AppImage
+#   packaging/appimage/build.sh gtk      -> dist/Fubuki-gtk-<version>-x86_64.AppImage
 version: 1
 
 script:
@@ -23,7 +23,7 @@ AppDir:
   path: ./AppDir
   app_info:
     id: io.github.dresden196.fubuki.gtk
-    name: Fubuki
+    name: Fubuki-gtk
     icon: fubuki
     version: !ENV ${FUBUKI_VERSION}
     exec: usr/bin/python3
