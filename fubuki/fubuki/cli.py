@@ -304,7 +304,7 @@ def cmd_serve(args):
                 cancel = CancelToken()
                 current.update(cancel=cancel, id=rid)
 
-                def do_write(em=em, cancel=cancel, jobd=req.get("job") or {}):
+                def do_write(em=em, cancel=cancel, jobd=req.get("job") or {}, rid=rid):
                     res = jobmod.run_job(jobd, em, cancel)
                     send({"id": rid, "event": "done", "ok": True, **{k: v for k, v in res.items() if k != "ok"}})
                     return None
@@ -324,7 +324,7 @@ def cmd_serve(args):
                 cancel = CancelToken()
                 current.update(cancel=cancel, id=rid)
 
-                def do_langs(em=em, cancel=cancel, r=req):
+                def do_langs(em=em, cancel=cancel, r=req, rid=rid):
                     ed = {"ids": r.get("edition_ids") or []}
                     res = windl.languages(int(r.get("version", 0)), ed, locale=r.get("locale", "en-US"),
                                           log=em.log, cancel=cancel)
@@ -339,7 +339,7 @@ def cmd_serve(args):
                 em = TaggedEmitter(rid, out)
                 cancel = CancelToken()
 
-                def do_links(em=em, cancel=cancel, r=req):
+                def do_links(em=em, cancel=cancel, r=req, rid=rid):
                     sessions = dl_sessions.get(r.get("token"))
                     ed = {"ids": r.get("edition_ids") or []}
                     lang = {"data": r.get("language_data") or []}
@@ -358,7 +358,7 @@ def cmd_serve(args):
                 cancel = CancelToken()
                 current.update(cancel=cancel, id=rid)
 
-                def do_dl(em=em, cancel=cancel, r=req):
+                def do_dl(em=em, cancel=cancel, r=req, rid=rid):
                     res = windl.download(r.get("url", ""), r.get("dest", ""), emitter=em, cancel=cancel, log=em.log)
                     send({"id": rid, "event": "done", "ok": True, **res})
                     return None
