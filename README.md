@@ -9,8 +9,8 @@ systems, DOS, and raw disk images. It does the things Rufus does that a plain
 `dd` cannot, and it does them with the tools a Linux system already has.
 
 <p align="center">
-  <img src="docs/screenshots/fubuki-kde.png" alt="Fubuki, the KDE window" height="520">
-  <img src="docs/screenshots/fubuki-gtk.png" alt="Fubuki, the GNOME window" height="520">
+  <a href="docs/screenshots/fubuki-kde.png"><img src="docs/screenshots/fubuki-kde-small.png" alt="Fubuki, the KDE window"></a>
+  <a href="docs/screenshots/fubuki-gtk.png"><img src="docs/screenshots/fubuki-gtk-small.png" alt="Fubuki, the GNOME window"></a>
 </p>
 
 - **Windows install media** on NTFS or exFAT, booting on UEFI through
