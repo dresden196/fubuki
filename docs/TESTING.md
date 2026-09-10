@@ -63,6 +63,11 @@ with `boot-real.sh` over USB passthrough):
 | Windows 11 24H2, NTFS via UEFI:NTFS, GPT | the Flatpak, as a plain user (polkit prompt) | | Setup, also under enforcing Secure Boot |
 | Ubuntu 24.04 Server, 2 GB persistence, MBR/FAT32 | `FUBUKI_BACKEND=udisks` as root | systemd | systemd |
 
+Packages (0.2.2): `Fubuki-qt-*.AppImage` and `Fubuki-gtk-*.AppImage` start on
+a bare X server and spawn their bundled engine; the two Flatpaks
+(`io.github.dresden196.fubuki` on the KDE runtime, `.gtk` on the GNOME
+runtime) report `backend: udisks, can_write: true` and list the stick.
+
 Known limitation, same as Rufus: a Linux ISO written to **exFAT** reaches
 its own GRUB through UEFI:NTFS but the distribution's signed GRUB has no
 exFAT driver, so it stops at a `grub>` prompt. Use FAT32 or NTFS for Linux

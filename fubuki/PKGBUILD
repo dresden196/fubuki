@@ -7,7 +7,7 @@
 # uefi-ntfs.img, FreeDOS, the Windows 11 24H2 setup wrapper, and the boot
 # sector code ported from ms-sys. See fubuki/bootcode.py and payload/.
 pkgname=fubuki
-pkgver=0.2.1
+pkgver=0.2.2
 pkgrel=1
 pkgdesc="Fubuki bootable USB writer: the engine and command line"
 arch=('any')

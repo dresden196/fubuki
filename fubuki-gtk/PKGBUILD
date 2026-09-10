@@ -4,7 +4,7 @@
 # the fubuki engine reports and hands it a job; the two front-ends share
 # the engine package and may be installed side by side.
 pkgname=fubuki-gtk
-pkgver=0.2.1
+pkgver=0.2.2
 pkgrel=1
 pkgdesc="Fubuki bootable USB writer: the GNOME window"
 arch=('any')
