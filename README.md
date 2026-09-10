@@ -8,10 +8,8 @@ Fubuki makes a USB stick that boots, from Windows and Linux installers, live
 systems, DOS, and raw disk images. It does the things Rufus does that a plain
 `dd` cannot, and it does them with the tools a Linux system already has.
 
-<p align="center">
-  <a href="docs/screenshots/fubuki-kde.png"><img src="docs/screenshots/fubuki-kde-small.png" alt="Fubuki, the KDE window"></a>
-  <a href="docs/screenshots/fubuki-gtk.png"><img src="docs/screenshots/fubuki-gtk-small.png" alt="Fubuki, the GNOME window"></a>
-</p>
+<p align="center"><img src="docs/screenshots/fubuki-kde.png" alt="Fubuki, the KDE window"></p>
+<p align="center"><img src="docs/screenshots/fubuki-gtk.png" alt="Fubuki, the GNOME window"></p>
 
 - **Windows install media** on NTFS or exFAT, booting on UEFI through
   UEFI:NTFS, or on FAT32 with `install.wim` split for you.
