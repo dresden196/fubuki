@@ -22,12 +22,12 @@ MEGABYTE = 1024 * 1024
 LOG_HEIGHT = 220
 
 
-class ChoiceRow(Adw.ComboRow):
-    """A combo row over (text, value) pairs. Changing the choices or the
+class ChoiceDrop(Gtk.DropDown):
+    """A drop-down over (text, value) pairs. Changing the choices or the
     value from code never reports back as a user change."""
 
-    def __init__(self, title, on_change):
-        super().__init__(title=title)
+    def __init__(self, on_change):
+        super().__init__(hexpand=True)
         self._values = []
         self._updating = False
         self._on_change = on_change
@@ -68,9 +68,45 @@ class ChoiceRow(Adw.ComboRow):
         self._on_change(self.get_value())
 
 
+def heading(text, first=False):
+    """A section title with the thin rule under it, the way Rufus draws
+    its groups."""
+    box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4, margin_top=0 if first else 12)
+    label = Gtk.Label(label=text, xalign=0)
+    label.add_css_class("title-4")
+    box.append(label)
+    box.append(Gtk.Separator())
+    return box
+
+
+def field_label(text):
+    return Gtk.Label(label=text, xalign=0, margin_top=6)
+
+
+def field(text, widget):
+    """A small label above its control, the two shown and hidden together."""
+    box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+    box.append(field_label(text))
+    box.append(widget)
+    return box
+
+
+def two_columns(left, right):
+    box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12, homogeneous=True)
+    box.append(left)
+    box.append(right)
+    return box
+
+
+def check(text, on_toggled, *args):
+    button = Gtk.CheckButton(label=text)
+    button.connect("toggled", on_toggled, *args)
+    return button
+
+
 class FubukiWindow(Adw.ApplicationWindow):
     def __init__(self, app, backend):
-        super().__init__(application=app, title="Fubuki", default_width=520, default_height=760)
+        super().__init__(application=app, title="Fubuki", default_width=740, default_height=1000)
         self.backend = backend
         self._updating = False
 
@@ -91,6 +127,7 @@ class FubukiWindow(Adw.ApplicationWindow):
         self.old_bios_fixes = False
         self.rufus_mbr = False
         self.persistence_mb = 0
+        self.persistence_gb = False
         self.advanced_format = False
         self._cluster_key = None
         self._pending_close = False
@@ -244,120 +281,145 @@ class FubukiWindow(Adw.ApplicationWindow):
         header.pack_end(menu)
         view.add_top_bar(header)
 
+        # Rufus's form: a label over each control, full width, top to
+        # bottom, with the status and the buttons pinned under it.
         scroller = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER, vexpand=True)
-        clamp = Adw.Clamp(maximum_size=640, margin_top=12, margin_bottom=12, margin_start=12, margin_end=12)
-        form = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=18)
-        clamp.set_child(form)
-        scroller.set_child(clamp)
+        form = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4,
+                       margin_top=12, margin_bottom=6, margin_start=12, margin_end=12)
+        scroller.set_child(form)
         view.set_content(scroller)
 
         # ================= Drive Properties =================
-        drive = Adw.PreferencesGroup(title=_("Drive Properties"))
-        form.append(drive)
+        form.append(heading(_("Drive Properties"), first=True))
 
-        self.device_row = ChoiceRow(_("Device"), self._on_device_selected)
+        form.append(field_label(_("Device")))
+        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        self.device_drop = ChoiceDrop(self._on_device_selected)
+        row.append(self.device_drop)
         refresh = Gtk.Button(icon_name="view-refresh-symbolic", valign=Gtk.Align.CENTER,
                              tooltip_text=_("Refresh the device list"))
         refresh.add_css_class("flat")
         refresh.connect("clicked", lambda *_a: self.backend.refresh_devices())
-        self.device_row.add_suffix(refresh)
+        row.append(refresh)
         self.refresh_button = refresh
-        drive.add(self.device_row)
+        form.append(row)
 
-        self.boot_row = ChoiceRow(_("Boot selection"), self._on_boot_type_selected)
+        form.append(field_label(_("Boot selection")))
+        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        self.boot_drop = ChoiceDrop(self._on_boot_type_selected)
+        row.append(self.boot_drop)
         self.hash_button = Gtk.Button(label="#", valign=Gtk.Align.CENTER, tooltip_text=_("Compute image checksums"))
         self.hash_button.add_css_class("flat")
         self.hash_button.connect("clicked", self._on_hash_clicked)
-        self.boot_row.add_suffix(self.hash_button)
+        row.append(self.hash_button)
         self.select_button = Gtk.Button(label=pgettext("@action:button", "SELECT"), valign=Gtk.Align.CENTER)
         self.select_button.connect("clicked", self._on_select_clicked)
-        self.boot_row.add_suffix(self.select_button)
-        drive.add(self.boot_row)
+        row.append(self.select_button)
+        form.append(row)
 
-        self.unsupported_row = Adw.ActionRow(
-            title=_("This image cannot be written: it is neither a bootable ISO nor a disk image."),
-            visible=False)
-        self.unsupported_row.add_css_class("error")
-        drive.add(self.unsupported_row)
+        self.unsupported_label = Gtk.Label(
+            label=_("This image cannot be written: it is neither a bootable ISO nor a disk image."),
+            xalign=0, wrap=True, visible=False, margin_top=6)
+        self.unsupported_label.add_css_class("error")
+        form.append(self.unsupported_label)
 
-        self.image_option_row = ChoiceRow(_("Image option"), self._on_image_option_selected)
-        drive.add(self.image_option_row)
-        self.edition_row = ChoiceRow(_("Windows edition"), self._on_edition_selected)
-        drive.add(self.edition_row)
+        self.image_option_drop = ChoiceDrop(self._on_image_option_selected)
+        self.image_option_box = field(_("Image option"), self.image_option_drop)
+        form.append(self.image_option_box)
+        self.edition_drop = ChoiceDrop(self._on_edition_selected)
+        self.edition_box = field(_("Windows edition"), self.edition_drop)
+        form.append(self.edition_box)
 
-        self.persistence_row = Adw.SpinRow.new_with_range(0, 0, 1)
-        self.persistence_row.set_title(_("Persistent partition size"))
-        self.persistence_row.set_subtitle(_("0 (No persistence)"))
-        self.persistence_row.get_adjustment().set_page_increment(1024)
-        self.persistence_row.add_suffix(Gtk.Label(label="MB"))
-        self.persistence_row.connect("notify::value", self._on_persistence_changed)
-        drive.add(self.persistence_row)
+        # Slider, spin box and unit, over the same number of megabytes.
+        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        self.persistence_scale = Gtk.Scale(orientation=Gtk.Orientation.HORIZONTAL,
+                                           adjustment=Gtk.Adjustment(lower=0, upper=0, step_increment=1,
+                                                                     page_increment=1024))
+        self.persistence_scale.set_draw_value(False)
+        self.persistence_scale.set_hexpand(True)
+        self.persistence_scale.connect("value-changed", self._on_persistence_slid)
+        row.append(self.persistence_scale)
+        self.persistence_spin = Gtk.SpinButton(adjustment=Gtk.Adjustment(lower=0, upper=0, step_increment=1,
+                                                                          page_increment=1024))
+        self.persistence_spin.set_width_chars(6)
+        self.persistence_spin.set_numeric(True)
+        self.persistence_spin.connect("value-changed", self._on_persistence_spun)
+        row.append(self.persistence_spin)
+        self.persistence_unit = Gtk.DropDown.new_from_strings(["MB", "GB"])
+        self.persistence_unit.connect("notify::selected", self._on_persistence_unit)
+        row.append(self.persistence_unit)
+        self.persistence_row = row
+        self.persistence_caption = Gtk.Label(label=_("0 (No persistence)"), xalign=0)
+        self.persistence_caption.add_css_class("caption")
+        self.persistence_caption.add_css_class("dim-label")
+        self.persistence_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        self.persistence_box.append(field_label(_("Persistent partition size")))
+        self.persistence_box.append(row)
+        self.persistence_box.append(self.persistence_caption)
+        form.append(self.persistence_box)
 
-        self.scheme_row = ChoiceRow(_("Partition scheme"), self._on_scheme_selected)
-        drive.add(self.scheme_row)
-        self.target_row = ChoiceRow(_("Target system"), self._on_target_selected)
-        drive.add(self.target_row)
+        self.scheme_drop = ChoiceDrop(self._on_scheme_selected)
+        self.target_drop = ChoiceDrop(self._on_target_selected)
+        form.append(two_columns(field(_("Partition scheme"), self.scheme_drop),
+                                field(_("Target system"), self.target_drop)))
 
-        self.advanced_drive = Adw.ExpanderRow(title=_("Show advanced drive properties"))
+        self.advanced_drive = Gtk.Expander(label=_("Show advanced drive properties"), margin_top=6)
         self.advanced_drive.connect("notify::expanded", self._on_advanced_drive_toggled)
-        self.usb_hdd_row = Adw.SwitchRow(title=_("List USB Hard Drives"))
-        self.usb_hdd_row.connect("notify::active", self._on_switch, "usb_hdd")
-        self.advanced_drive.add_row(self.usb_hdd_row)
-        self.old_bios_row = Adw.SwitchRow(title=_("Add fixes for old BIOSes (extra partition, align, etc.)"))
-        self.old_bios_row.connect("notify::active", self._on_switch, "old_bios_fixes")
-        self.advanced_drive.add_row(self.old_bios_row)
-        self.rufus_mbr_row = Adw.SwitchRow(title=_("Use masquerading MBR (BIOS ID 0x81)"))
-        self.rufus_mbr_row.connect("notify::active", self._on_switch, "rufus_mbr")
-        self.advanced_drive.add_row(self.rufus_mbr_row)
-        drive.add(self.advanced_drive)
+        self.advanced_drive_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, margin_top=6)
+        self.usb_hdd_check = check(_("List USB Hard Drives"), self._on_check, "usb_hdd")
+        self.advanced_drive_box.append(self.usb_hdd_check)
+        self.old_bios_check = check(_("Add fixes for old BIOSes (extra partition, align, etc.)"),
+                                    self._on_check, "old_bios_fixes")
+        self.advanced_drive_box.append(self.old_bios_check)
+        self.rufus_mbr_check = check(_("Use masquerading MBR (BIOS ID 0x81)"), self._on_check, "rufus_mbr")
+        self.advanced_drive_box.append(self.rufus_mbr_check)
+        self.advanced_drive.set_child(self.advanced_drive_box)
+        form.append(self.advanced_drive)
 
         # ================= Format Options =================
-        fmt_group = Adw.PreferencesGroup(title=_("Format Options"))
-        form.append(fmt_group)
+        form.append(heading(_("Format Options")))
 
-        self.label_row = Adw.EntryRow(title=_("Volume label"))
-        self.label_row.connect("notify::text", self._on_label_changed)
-        fmt_group.add(self.label_row)
-        self.fs_row = ChoiceRow(_("File system"), self._on_fs_selected)
-        fmt_group.add(self.fs_row)
-        self.cluster_row = ChoiceRow(_("Cluster size"), self._on_cluster_selected)
-        fmt_group.add(self.cluster_row)
+        self.label_entry = Gtk.Entry(hexpand=True)
+        self.label_entry.connect("notify::text", self._on_label_changed)
+        form.append(field(_("Volume label"), self.label_entry))
 
-        self.advanced_format_row = Adw.ExpanderRow(title=_("Show advanced format options"))
-        self.advanced_format_row.connect("notify::expanded", self._on_advanced_format_toggled)
-        self.quick_row = Adw.SwitchRow(title=_("Quick format"), active=True)
-        self.quick_row.connect("notify::active", self._on_switch, "quick_format")
-        self.advanced_format_row.add_row(self.quick_row)
-        self.extended_row = Adw.SwitchRow(title=_("Create extended label and icon files"))
-        self.extended_row.connect("notify::active", self._on_switch, "extended_label")
-        self.advanced_format_row.add_row(self.extended_row)
-        self.bad_blocks_row = Adw.ActionRow(title=_("Check device for bad blocks"))
-        self.bad_blocks_check = Gtk.CheckButton(valign=Gtk.Align.CENTER)
+        self.fs_drop = ChoiceDrop(self._on_fs_selected)
+        self.cluster_drop = ChoiceDrop(self._on_cluster_selected)
+        form.append(two_columns(field(_("File system"), self.fs_drop),
+                                field(_("Cluster size"), self.cluster_drop)))
+
+        self.advanced_format_expander = Gtk.Expander(label=_("Show advanced format options"), margin_top=6)
+        self.advanced_format_expander.connect("notify::expanded", self._on_advanced_format_toggled)
+        self.advanced_format_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, margin_top=6)
+        self.quick_check = check(_("Quick format"), self._on_check, "quick_format")
+        self.quick_check.set_active(True)
+        self.advanced_format_box.append(self.quick_check)
+        self.extended_check = check(_("Create extended label and icon files"), self._on_check, "extended_label")
+        self.advanced_format_box.append(self.extended_check)
+        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        self.bad_blocks_check = Gtk.CheckButton(label=_("Check device for bad blocks"))
         self.bad_blocks_check.connect("toggled", self._on_bad_blocks_toggled)
-        self.bad_blocks_row.add_prefix(self.bad_blocks_check)
-        self.bad_blocks_row.set_activatable_widget(self.bad_blocks_check)
+        row.append(self.bad_blocks_check)
         # A plural form per count, built once rather than inline so it can
         # be translated.
         self.passes_drop = Gtk.DropDown.new_from_strings(
             [fmt(ngettext("%1 pass", "%1 passes", n), n) for n in (1, 2, 3, 4)])
         self.passes_drop.set_valign(Gtk.Align.CENTER)
         self.passes_drop.connect("notify::selected", self._on_passes_selected)
-        self.bad_blocks_row.add_suffix(self.passes_drop)
-        self.advanced_format_row.add_row(self.bad_blocks_row)
-        fmt_group.add(self.advanced_format_row)
+        row.append(self.passes_drop)
+        self.advanced_format_box.append(row)
+        self.advanced_format_expander.set_child(self.advanced_format_box)
+        form.append(self.advanced_format_expander)
 
         # ================= Status =================
-        bottom = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6,
-                         margin_top=6, margin_bottom=12, margin_start=12, margin_end=12)
-        status_group = Adw.PreferencesGroup(title=_("Status"))
-        status_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-        self.status_label = Gtk.Label(ellipsize=Pango.EllipsizeMode.END, xalign=0.5)
+        bottom = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4,
+                         margin_top=0, margin_bottom=12, margin_start=12, margin_end=12)
+        bottom.append(heading(_("Status")))
+        self.status_label = Gtk.Label(ellipsize=Pango.EllipsizeMode.END, xalign=0.5, margin_top=6)
         self.status_label.add_css_class("heading")
-        status_box.append(self.status_label)
+        bottom.append(self.status_label)
         self.progress = Gtk.ProgressBar()
-        status_box.append(self.progress)
-        status_group.add(status_box)
-        bottom.append(status_group)
+        bottom.append(self.progress)
 
         actions = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6, margin_top=6)
         self.log_button = Gtk.ToggleButton()
@@ -407,66 +469,76 @@ class FubukiWindow(Adw.ApplicationWindow):
             busy = self.busy
             devices = backend.devices
             if devices:
-                self.device_row.set_choices([(str(d.get("display") or d.get("device")), d.get("device"))
-                                             for d in devices], self.device_path)
+                self.device_drop.set_choices([(str(d.get("display") or d.get("device")), d.get("device"))
+                                              for d in devices], self.device_path)
             else:
-                self.device_row.set_choices([(_("No device found"), None)], None)
-            self.device_row.set_sensitive(not busy and bool(devices))
+                self.device_drop.set_choices([(_("No device found"), None)], None)
+            self.device_drop.set_sensitive(not busy and bool(devices))
             self.refresh_button.set_sensitive(not busy)
 
-            self.boot_row.set_choices(self.boot_types(), self.boot_type)
-            self.boot_row.set_sensitive(not busy)
+            self.boot_drop.set_choices(self.boot_types(), self.boot_type)
+            self.boot_drop.set_sensitive(not busy)
             self.hash_button.set_sensitive(self.has_image and not busy)
             self.select_button.set_sensitive(not busy)
-            self.unsupported_row.set_visible(self.image_unsupported)
+            self.unsupported_label.set_visible(self.image_unsupported)
 
             options = self.image_options()
-            self.image_option_row.set_visible(self.boot_type == "image" and self.has_image and bool(options))
-            self.image_option_row.set_choices(options, self.image_option)
-            self.image_option_row.set_sensitive(not busy)
+            self.image_option_box.set_visible(self.boot_type == "image" and self.has_image and bool(options))
+            self.image_option_drop.set_choices(options, self.image_option)
+            self.image_option_drop.set_sensitive(not busy)
 
             editions = self.editions
-            self.edition_row.set_visible(self.wintogo and bool(editions))
-            self.edition_row.set_choices([(str(e.get("name", "")), e.get("index")) for e in editions],
-                                         self.wintogo_index)
-            self.edition_row.set_sensitive(not busy)
+            self.edition_box.set_visible(self.wintogo and bool(editions))
+            self.edition_drop.set_choices([(str(e.get("name", "")), e.get("index")) for e in editions],
+                                          self.wintogo_index)
+            self.edition_drop.set_sensitive(not busy)
 
             available = self.persistence_available
             max_mb = self.persistence_max_mb
-            self.persistence_row.set_visible(available)
-            self.persistence_row.get_adjustment().set_upper(max_mb)
-            self.persistence_row.set_value(min(self.persistence_mb, max_mb))
+            mb = min(self.persistence_mb, max_mb)
+            self.persistence_box.set_visible(available)
             self.persistence_row.set_sensitive(not busy and max_mb > 0)
-            self.persistence_row.set_subtitle(
+            self.persistence_scale.set_range(0, max_mb)
+            self.persistence_scale.set_value(mb)
+            if self.persistence_gb:
+                self.persistence_spin.set_range(0, max_mb // 1024)
+                self.persistence_spin.set_increments(1, 1)
+                self.persistence_spin.set_value(mb // 1024)
+            else:
+                self.persistence_spin.set_range(0, max_mb)
+                self.persistence_spin.set_increments(1, 1024)
+                self.persistence_spin.set_value(mb)
+            self.persistence_unit.set_selected(1 if self.persistence_gb else 0)
+            self.persistence_caption.set_text(
                 fmt(_("%1 persistent partition"), human_size(self.persistence_mb * MEGABYTE))
                 if self.persistence_mb > 0 else _("0 (No persistence)"))
 
-            self.scheme_row.set_choices([("MBR", "mbr"), ("GPT", "gpt")], self.scheme)
-            self.scheme_row.set_sensitive(not busy)
-            self.target_row.set_choices(self.targets(), self.target)
-            self.target_row.set_sensitive(not busy)
+            self.scheme_drop.set_choices([("MBR", "mbr"), ("GPT", "gpt")], self.scheme)
+            self.scheme_drop.set_sensitive(not busy)
+            self.target_drop.set_choices(self.targets(), self.target)
+            self.target_drop.set_sensitive(not busy)
 
-            self.advanced_drive.set_sensitive(not busy)
-            self.usb_hdd_row.set_active(backend.list_usb_hdd)
+            self.advanced_drive_box.set_sensitive(not busy)
+            self.usb_hdd_check.set_active(backend.list_usb_hdd)
             mbr_bios = self.scheme == "mbr" and self.target != "uefi"
-            self.old_bios_row.set_active(self.old_bios_fixes)
-            self.old_bios_row.set_sensitive(mbr_bios)
-            self.rufus_mbr_row.set_active(self.rufus_mbr)
-            self.rufus_mbr_row.set_sensitive(mbr_bios)
+            self.old_bios_check.set_active(self.old_bios_fixes)
+            self.old_bios_check.set_sensitive(mbr_bios)
+            self.rufus_mbr_check.set_active(self.rufus_mbr)
+            self.rufus_mbr_check.set_sensitive(mbr_bios)
 
             # DD writes the image's own partition table and file systems;
             # there is nothing here to label or format.
             formatting = not busy and not self.dd_mode
-            if self.label_row.get_text() != self.label:
-                self.label_row.set_text(self.label)
-            self.label_row.set_sensitive(formatting)
-            self.fs_row.set_choices(self.file_systems(), self.fs)
-            self.fs_row.set_sensitive(formatting)
-            self.cluster_row.set_choices(self.cluster_choices(), self.cluster_size)
-            self.cluster_row.set_sensitive(formatting)
-            self.advanced_format_row.set_sensitive(formatting)
-            self.quick_row.set_active(self.quick_format)
-            self.extended_row.set_active(self.extended_label)
+            if self.label_entry.get_text() != self.label:
+                self.label_entry.set_text(self.label)
+            self.label_entry.set_sensitive(formatting)
+            self.fs_drop.set_choices(self.file_systems(), self.fs)
+            self.fs_drop.set_sensitive(formatting)
+            self.cluster_drop.set_choices(self.cluster_choices(), self.cluster_size)
+            self.cluster_drop.set_sensitive(formatting)
+            self.advanced_format_box.set_sensitive(formatting)
+            self.quick_check.set_active(self.quick_format)
+            self.extended_check.set_active(self.extended_label)
             self.bad_blocks_check.set_active(self.bad_blocks > 0)
             self.passes_drop.set_selected(max(0, self.bad_blocks_passes - 1))
             self.passes_drop.set_sensitive(self.bad_blocks > 0)
@@ -726,10 +798,25 @@ class FubukiWindow(Adw.ApplicationWindow):
             return
         self.wintogo_index = int(value)
 
-    def _on_persistence_changed(self, *_args):
+    def _on_persistence_slid(self, *_args):
         if self._updating:
             return
-        self.persistence_mb = int(self.persistence_row.get_value())
+        self.persistence_mb = int(round(self.persistence_scale.get_value()))
+        self._sync()
+
+    def _on_persistence_spun(self, *_args):
+        if self._updating:
+            return
+        value = int(self.persistence_spin.get_value())
+        self.persistence_mb = value * 1024 if self.persistence_gb else value
+        self._sync()
+
+    def _on_persistence_unit(self, *_args):
+        if self._updating:
+            return
+        self.persistence_gb = self.persistence_unit.get_selected() == 1
+        if self.persistence_gb:
+            self.persistence_mb = (self.persistence_mb // 1024) * 1024
         self._sync()
 
     def _on_scheme_selected(self, value):
@@ -762,12 +849,12 @@ class FubukiWindow(Adw.ApplicationWindow):
     def _on_label_changed(self, *_args):
         if self._updating:
             return
-        self.label = self.label_row.get_text()
+        self.label = self.label_entry.get_text()
 
-    def _on_switch(self, row, _pspec, name):
+    def _on_check(self, button, name):
         if self._updating:
             return
-        on = row.get_active()
+        on = button.get_active()
         if name == "usb_hdd":
             self.backend.set_list_usb_hdd(on)
         else:
@@ -786,14 +873,14 @@ class FubukiWindow(Adw.ApplicationWindow):
         if self.bad_blocks:
             self.bad_blocks = self.bad_blocks_passes
 
-    def _on_advanced_drive_toggled(self, row, _pspec):
-        row.set_title(_("Hide advanced drive properties") if row.get_expanded()
-                      else _("Show advanced drive properties"))
+    def _on_advanced_drive_toggled(self, expander, _pspec):
+        expander.set_label(_("Hide advanced drive properties") if expander.get_expanded()
+                           else _("Show advanced drive properties"))
 
-    def _on_advanced_format_toggled(self, row, _pspec):
-        self.advanced_format = row.get_expanded()
-        row.set_title(_("Hide advanced format options") if self.advanced_format
-                      else _("Show advanced format options"))
+    def _on_advanced_format_toggled(self, expander, _pspec):
+        self.advanced_format = expander.get_expanded()
+        expander.set_label(_("Hide advanced format options") if self.advanced_format
+                           else _("Show advanced format options"))
         self._settle()
 
     def _on_log_toggled(self, button):
