@@ -1,24 +1,18 @@
-# Fubuki as a Flatpak: the KDE window plus the engine and every tool it
+# Fubuki as a Flatpak: the GNOME window plus the engine and every tool it
 # shells out to, built from source. No root: the engine talks to udisks2
 # over the system bus (polkit asks once when the drive is opened), formats
 # by writing file-system images it built itself, and installs Syslinux and
-# GRUB by hand. See fubuki/fubuki/backend.py. The window sees can_write in
-# the engine's hello and never reaches for pkexec, so no polkit action
-# file goes in here.
+# GRUB by hand. See fubuki/fubuki/backend.py.
 #
-# The 6.11 KDE runtime carries KDE Frameworks 6.28 along with Qt 6.11, so
-# Kirigami, KI18n and the org.kde.desktop QQC2 style (with its KIconThemes
-# and KColorScheme integration) come from the runtime; the SDK has ECM for
-# the window's CMake. What the runtime lacks for the engine is PyGObject,
-# built below. The GNOME window ships as io.github.dresden196.fubuki.gtk
-# (see the .gtk.yml next to this one); both may be installed side by side.
+#   flatpak-builder --user --install --force-clean build-dir packaging/flatpak/io.github.dresden196.fubuki.gtk.yml
 #
-#   flatpak-builder --user --install --force-clean build-dir packaging/flatpak/io.github.dresden196.fubuki.yml
-app-id: io.github.dresden196.fubuki
-runtime: org.kde.Platform
-runtime-version: '6.11'
-sdk: org.kde.Sdk
-command: fubuki-qt
+# The KDE window ships as io.github.dresden196.fubuki (see the .yml next to
+# this one); both may be installed side by side.
+app-id: io.github.dresden196.fubuki.gtk
+runtime: org.gnome.Platform
+runtime-version: '50'
+sdk: org.gnome.Sdk
+command: fubuki-gtk
 finish-args:
   - --share=ipc
   - --socket=fallback-x11
@@ -32,13 +26,14 @@ finish-args:
   # Images live anywhere on the host; the file chooser portal hands over
   # single files, this lets a path typed or passed on the command line work.
   - --filesystem=host:ro
-  - --env=QT_QPA_PLATFORM=wayland;xcb
   - --env=PYTHONPATH=/app/lib/python3/site-packages
   - --env=FUBUKI_LIB=/app/lib/fubuki
   - --env=FUBUKI_PAYLOAD=/app/share/fubuki
+  - --env=FUBUKI_GTK_LIB=/app/lib/fubuki-gtk
   - --env=FUBUKI_GRUB_DIR=/app/lib/grub/i386-pc
   - --env=FUBUKI_ENGINE=/app/bin/fubuki
   - --env=FUBUKI_LOCALE_DIR=/app/share/locale
+  - --env=FUBUKI_GTK_LOCALE_DIR=/app/share/locale
   - --env=FUBUKI_SYSLINUX=/app/share/fubuki/syslinux
 cleanup:
   - /include
@@ -49,17 +44,6 @@ cleanup:
   - '*.la'
   - '*.a'
 modules:
-  # ------------------------------------------------------------- Engine tools
-  - name: pygobject
-    # The engine's udisks2 backend speaks D-Bus through Gio (import gi). The
-    # KDE runtime has python3 (3.13), GLib 2.84 and the Gio typelibs but not
-    # PyGObject; built against the runtime's python3, without pycairo.
-    buildsystem: meson
-    config-opts: [-Dpycairo=disabled, -Dtests=false]
-    sources:
-      - type: archive
-        url: https://download.gnome.org/sources/pygobject/3.58/pygobject-3.58.0.tar.gz
-        sha256: 45068697de3ffe46840ca369705f23118b34db4f7deb63f6eff079a6734ddcca
   - name: zstd
     buildsystem: simple
     build-commands:
@@ -140,31 +124,25 @@ modules:
         commands:
           # The 2.12 tarball ships without this generated file (upstream bug).
           - echo 'depends bli part_gpt' > grub-core/extra_deps.lst
-  # ---------------------------------------------------- Fubuki: engine + window
   - name: fubuki
-    # The window is built with CMake from fubuki-qt/app (its .po catalogs are
-    # picked up from the sibling fubuki-qt/po by ki18n_install); the engine,
-    # its payload and its catalogs are copied in afterwards, as in the GTK
-    # manifest.
-    buildsystem: cmake-ninja
-    builddir: true
-    subdir: fubuki-qt/app
-    config-opts: [-DCMAKE_BUILD_TYPE=Release]
-    # post-install runs inside the subdir's build tree; the engine and the
-    # desktop bits are addressed from the module root, which flatpak-builder
-    # exports as FLATPAK_BUILDER_BUILDDIR.
-    post-install:
-      - cd "$FLATPAK_BUILDER_BUILDDIR" && install -d /app/lib/fubuki /app/share/fubuki
-      - cd "$FLATPAK_BUILDER_BUILDDIR" && cp -r fubuki/fubuki /app/lib/fubuki/
-      - cd "$FLATPAK_BUILDER_BUILDDIR" && cp -r fubuki/payload/. /app/share/fubuki/
-      - cd "$FLATPAK_BUILDER_BUILDDIR" && install -Dm755 fubuki/bin/fubuki /app/bin/fubuki
-      - cd "$FLATPAK_BUILDER_BUILDDIR" && for po in fubuki/po/*/fubuki.po; do lang=$(basename $(dirname $po)); install -d /app/share/locale/$lang/LC_MESSAGES; msgfmt -o /app/share/locale/$lang/LC_MESSAGES/fubuki.mo $po; done
-      - cd "$FLATPAK_BUILDER_BUILDDIR" && install -Dm644 fubuki/icons/fubuki.svg /app/share/icons/hicolor/scalable/apps/io.github.dresden196.fubuki.svg
-      - cd "$FLATPAK_BUILDER_BUILDDIR" && install -d /app/share/applications && sed -e 's/^Icon=fubuki$/Icon=io.github.dresden196.fubuki/' fubuki-qt/io.github.dresden196.fubuki.desktop > /app/share/applications/io.github.dresden196.fubuki.desktop
-      # The tree has no metainfo for the KDE window yet; the GNOME one with
-      # the ids and the one sentence that names the toolkit swapped.
-      - cd "$FLATPAK_BUILDER_BUILDDIR" && install -d /app/share/metainfo && sed -e 's/io\.github\.dresden196\.fubuki\.gtk/io.github.dresden196.fubuki/g' -e 's/the GNOME window over the fubuki engine; a KDE window is/the KDE window over the fubuki engine; a GNOME window is/' fubuki-gtk/io.github.dresden196.fubuki.gtk.metainfo.xml > /app/share/metainfo/io.github.dresden196.fubuki.metainfo.xml
+    buildsystem: simple
+    build-commands:
+      - install -d /app/lib/fubuki /app/share/fubuki
+      - cp -r fubuki/fubuki /app/lib/fubuki/
+      - cp -r fubuki/payload/. /app/share/fubuki/
+      - install -Dm755 fubuki/bin/fubuki /app/bin/fubuki
+      - for po in fubuki/po/*/fubuki.po; do lang=$(basename $(dirname $po)); install -d /app/share/locale/$lang/LC_MESSAGES; msgfmt -o /app/share/locale/$lang/LC_MESSAGES/fubuki.mo $po; done
+      - install -d /app/lib/fubuki-gtk
+      - cp -r fubuki-gtk/fubuki_gtk /app/lib/fubuki-gtk/
+      - install -Dm755 fubuki-gtk/bin/fubuki-gtk /app/bin/fubuki-gtk
+      - for po in fubuki-gtk/po/*/fubuki-gtk.po; do [ -f "$po" ] || continue; lang=$(basename $(dirname $po)); install -d /app/share/locale/$lang/LC_MESSAGES; msgfmt -o /app/share/locale/$lang/LC_MESSAGES/fubuki-gtk.mo $po; done
+      # The desktop file and metainfo in the tree already carry the .gtk id;
+      # only the icon name changes, from the engine's plain "fubuki" to the
+      # app id Flatpak exports.
+      - install -Dm644 fubuki/icons/fubuki.svg /app/share/icons/hicolor/scalable/apps/io.github.dresden196.fubuki.gtk.svg
+      - install -d /app/share/applications && sed -e 's/^Icon=fubuki$/Icon=io.github.dresden196.fubuki.gtk/' fubuki-gtk/io.github.dresden196.fubuki.gtk.desktop > /app/share/applications/io.github.dresden196.fubuki.gtk.desktop
+      - install -Dm644 fubuki-gtk/io.github.dresden196.fubuki.gtk.metainfo.xml /app/share/metainfo/io.github.dresden196.fubuki.gtk.metainfo.xml
     sources:
       - type: dir
         path: ../..
-        skip: [.git, dist, build-dir, .flatpak-builder, tests, packaging/appimage/AppDir, packaging/appimage/appimage-build, fubuki/src, fubuki/pkg, fubuki-gtk/src, fubuki-gtk/pkg, fubuki-gtk/fubuki_gtk, fubuki-gtk/bin, fubuki-qt/src, fubuki-qt/pkg]
+        skip: [.git, dist, build-dir, .flatpak-builder, fubuki-qt, tests, packaging/appimage/AppDir, packaging/appimage/appimage-build, fubuki/src, fubuki/pkg, fubuki-gtk/src, fubuki-gtk/pkg]
