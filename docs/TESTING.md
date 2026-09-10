@@ -38,6 +38,27 @@ controller), `FUBUKI_EXTRA_DISK=1` (an empty SATA disk), `FUBUKI_BOOT_MEM`,
 | Windows XP SP3 setup media (masquerading MBR, patched setupldr) | MBR, FAT32 | text-mode Setup | |
 | Fedora Workstation 44 (config in /boot/grub2) | MBR, FAT32 | GRUB → kernel | Plymouth |
 | SakuraOS live (archiso, Syslinux 6.04) | MBR, FAT32 and ext4 | welcome | welcome |
+
+Re-verified on 2026-09-10 after the engine took over partitioning, formatting
+and boot-loader placement from sfdisk, extlinux and grub-install (the udisks2
+backend shares that code):
+
+| Media | Layout | BIOS | UEFI |
+|---|---|---|---|
+| FreeDOS 1.4 | MBR, FAT32 | `C:\>` prompt | |
+| TinyCore (Syslinux, written natively, through udisks2, and from the Flatpak as a plain user) | MBR, FAT32 | menu | no UEFI loader in that ISO |
+| Ubuntu 20.04 Server (isolinux + gfxboot) | MBR, FAT32 | kernel, cloud-init | kernel, cloud-init |
+| Ubuntu 24.04 Server (GRUB), 2 GB persistence | MBR, FAT32 + ext4 | casper with persistence | casper with persistence |
+| Ubuntu 20.04 Server, DD mode with read-back verify | as image | kernel | |
+| Windows 11 24H2, FAT32 with split install.swm | MBR | Setup | Setup |
+| Windows 11 24H2, NTFS via UEFI:NTFS | GPT | | Setup |
+| Windows XP SP3 setup media | MBR, FAT32 | text-mode Setup | |
+| Windows To Go, NTFS | MBR | see below | see below |
+
+Known limitation, same as Rufus: a Linux ISO written to **exFAT** reaches
+its own GRUB through UEFI:NTFS but the distribution's signed GRUB has no
+exFAT driver, so it stops at a `grub>` prompt. Use FAT32 or NTFS for Linux
+images.
 | FreeDOS 1.4 | MBR, FAT32; FAT16 on a 1 GB drive | `C:\>` | |
 | KolibriOS | MBR, FAT32 | desktop | |
 | Grub4DOS boot type | MBR, FAT32 | `grub>` | |

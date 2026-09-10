@@ -12,9 +12,10 @@ from .util import Emitter, CancelToken, UsbError, Cancelled, human_size
 from .i18n import _
 
 
-def _need_root():
-    if os.geteuid() != 0:
-        raise UsbError(_("Writing a drive needs root: run through pkexec or sudo"))
+def _need_writer():
+    from .backend import get_backend
+    if not get_backend().can_write:
+        raise UsbError(_("Writing a drive needs root (pkexec or sudo) or the udisks2 backend"))
 
 
 def cmd_devices(args):
@@ -108,7 +109,7 @@ def _parse_size(s):
 
 
 def cmd_write(args):
-    _need_root()
+    _need_writer()
     j = _job_from_args(args)
     if not args.json and not args.yes:
         d = devices.find_disk(j.get("device", ""))
@@ -169,7 +170,15 @@ def cmd_serve(args):
             out.write(json.dumps(obj, default=str) + "\n")
             out.flush()
 
+    from .backend import get_backend
+    try:
+        be = get_backend()
+        backend_name, can_write = be.name, be.can_write
+    except UsbError as e:
+        backend_name, can_write = "none", False
+        print(f"backend: {e}", file=sys.stderr)
     send({"event": "hello", "app": APP_NAME, "version": __version__, "root": os.geteuid() == 0,
+          "backend": backend_name, "can_write": can_write,
           "windows_options": list(ua.ALL_OPTIONS), "windows_defaults": sorted(ua.DEFAULT_OPTIONS)})
     current = {"thread": None, "cancel": None, "id": None}
     threads = []
@@ -239,8 +248,8 @@ def cmd_serve(args):
                 if current["thread"] is not None and current["thread"].is_alive():
                     send({"id": rid, "error": "a job is already running"})
                     continue
-                if os.geteuid() != 0:
-                    send({"id": rid, "event": "done", "ok": False, "error": "writing needs root"})
+                if not can_write:
+                    send({"id": rid, "event": "done", "ok": False, "error": "writing needs root or the udisks2 backend"})
                     continue
                 em = TaggedEmitter(rid, out)
                 cancel = CancelToken()
@@ -273,6 +282,8 @@ def main(argv=None):
     p = argparse.ArgumentParser(prog="fubuki", description=f"{APP_NAME} {__version__}")
     p.add_argument("--json", action="store_true", help="machine-readable output")
     p.add_argument("--compact", action="store_true", help="single-line JSON")
+    p.add_argument("--backend", choices=("auto", "native", "udisks"),
+                   help="how to reach the drive: device nodes as root (native) or udisks2 over D-Bus (udisks)")
     sub = p.add_subparsers(dest="command", required=True)
 
     s = sub.add_parser("devices", help="list drives that can be written")
@@ -330,6 +341,8 @@ def main(argv=None):
             argv.remove(flag)
             argv.insert(0, flag)
     args = p.parse_args(argv)
+    if args.backend and args.backend != "auto":
+        os.environ["FUBUKI_BACKEND"] = args.backend
     try:
         return args.fn(args)
     except UsbError as e:

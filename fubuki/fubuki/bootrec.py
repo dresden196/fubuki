@@ -29,6 +29,8 @@ MBR_KINDS = {
 
 
 def _sector_size(dev):
+    if hasattr(dev, "sector_size"):
+        return dev.sector_size
     try:
         with open(f"/sys/class/block/{os.path.basename(os.path.realpath(dev))}/queue/logical_block_size") as f:
             return int(f.read().strip())

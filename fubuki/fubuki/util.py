@@ -70,26 +70,32 @@ class Emitter:
         self.verbose = verbose
         self._lock = threading.Lock()
         self._last_progress = (None, -1.0, 0.0)
+        self._cr_pending = False    # text mode: a progress line without newline is on screen
 
     def _write(self, obj):
         with self._lock:
             self.stream.write(json.dumps(obj, ensure_ascii=False) + "\n")
             self.stream.flush()
 
+    def _text(self, text):
+        with self._lock:
+            if self._cr_pending:
+                print(file=sys.stderr)
+                self._cr_pending = False
+            print(text, file=sys.stderr)
+
     def log(self, text):
         if self.json_mode:
             self._write({"event": "log", "text": text})
         else:
-            with self._lock:
-                print(text, file=sys.stderr)
+            self._text(text)
 
     def status(self, text):
         """The one-line status the window shows under the progress bar."""
         if self.json_mode:
             self._write({"event": "status", "text": text})
         else:
-            with self._lock:
-                print("==> " + text, file=sys.stderr)
+            self._text("==> " + text)
 
     def progress(self, phase, value, message=None):
         """value is 0..1 within the phase, or None for indeterminate."""
@@ -109,6 +115,7 @@ class Emitter:
             with self._lock:
                 print(f"    [{phase}] {value * 100:5.1f}%" + (f" {message}" if message else ""),
                       file=sys.stderr, end="\r")
+                self._cr_pending = True
 
     def event(self, **kw):
         if self.json_mode:
@@ -182,8 +189,15 @@ def run(cmd, check=True, input=None, capture=True, env=None, cancel=None, cwd=No
 
 
 def sync_device(dev):
-    """Flush everything to the disk before we declare it done."""
+    """Flush everything to the disk before we declare it done. Takes a
+    path or a BlockTarget; BLKFLSBUF (root only) also drops the cache."""
     os.sync()
+    if hasattr(dev, "fsync"):
+        try:
+            dev.fsync()
+        except OSError:
+            pass
+        return
     try:
         fd = os.open(dev, os.O_RDONLY)
         try:
@@ -197,6 +211,9 @@ def sync_device(dev):
 
 
 def read_at(dev, offset, size):
+    """Read from a device path or a BlockTarget."""
+    if hasattr(dev, "pread"):
+        return dev.pread(size, offset)
     fd = os.open(dev, os.O_RDONLY)
     try:
         return os.pread(fd, size, offset)
@@ -205,6 +222,11 @@ def read_at(dev, offset, size):
 
 
 def write_at(dev, offset, data):
+    """Write to a device path or a BlockTarget, and flush it."""
+    if hasattr(dev, "pwrite"):
+        dev.pwrite(data, offset)
+        dev.fsync()
+        return
     fd = os.open(dev, os.O_WRONLY)
     try:
         n = os.pwrite(fd, data, offset)
@@ -213,6 +235,26 @@ def write_at(dev, offset, data):
         os.fsync(fd)
     finally:
         os.close(fd)
+
+
+def sandboxed():
+    """Inside a Flatpak or an AppImage."""
+    return os.path.exists("/.flatpak-info") or bool(os.environ.get("APPIMAGE"))
+
+
+def default_temp_dir():
+    """Where big temporary files go (extracted install.wim, file-system
+    images): $TMPDIR as usual, except in a sandbox, where /tmp is a small
+    RAM disk and the app's cache directory is on the real disk."""
+    if sandboxed():
+        base = os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache")
+        d = os.path.join(base, "fubuki")
+        try:
+            os.makedirs(d, exist_ok=True)
+            return d
+        except OSError:
+            pass
+    return None
 
 
 def payload_dir():

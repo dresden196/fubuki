@@ -11,9 +11,10 @@ import subprocess
 import tempfile
 import time
 
-from . import bootrec, devices, extract, fs as fsmod, image, layout, linux, mountctl, unattend as ua, windows, wim as wimmod, writer
+from . import badblocks, bootrec, devices, extract, fs as fsmod, image, layout, linux, unattend as ua, windows, wim as wimmod, writer
+from .backend import get_backend
 from .udf import open_image
-from .util import (UsbError, Cancelled, human_size, payload_path, sync_device, GB, MB, KB, write_at, read_at)
+from .util import (UsbError, Cancelled, human_size, payload_path, sync_device, default_temp_dir, GB, MB, KB)
 
 from .i18n import _
 
@@ -116,6 +117,8 @@ def normalize(job):
     j.setdefault("allow_internal", False)
     j.setdefault("allow_loop", False)
     j.setdefault("temp_dir", None)
+    if not j["temp_dir"]:
+        j["temp_dir"] = default_temp_dir()
     if j["scheme"] not in ("mbr", "gpt"):
         raise UsbError(_("scheme must be mbr or gpt"))
     if j["target"] not in ("bios", "uefi", "dual"):
@@ -137,19 +140,20 @@ def run_job(job, emitter, cancel=None):
     j = normalize(job)
     prog = Progress(emitter)
     log = emitter.log
+    backend = get_backend()
     dev = os.path.realpath(j["device"])
-    disk = devices.find_disk(dev)
-    if disk is None:
-        if os.path.exists(dev) and devices.is_system_disk(dev):
+    disk_info = devices.find_disk(dev)
+    if disk_info is None:
+        if devices.is_system_disk(dev):
             raise UsbError(_("%s holds the running system; refusing to write it") % dev)
         raise UsbError(_("%s is not a disk") % dev)
-    if disk["kind"] == "internal" and not j["allow_internal"]:
+    if disk_info["kind"] == "internal" and not j["allow_internal"]:
         raise UsbError(_("%s is an internal drive; refusing to write it") % dev)
-    if disk["kind"] == "loop" and not j["allow_loop"]:
+    if disk_info["kind"] == "loop" and not j["allow_loop"]:
         raise UsbError(_("%s is a loop device; refusing to write it") % dev)
-    disk_size, sector = disk["size"], disk["sector_size"]
-    log(f"Device: {disk['display']} ({dev}), {human_size(disk_size)}, {sector}-byte sectors, {disk['kind']}")
-    if disk["kind"] == "internal":
+    disk_size, sector = disk_info["size"], disk_info["sector_size"]
+    log(f"Device: {disk_info['display']} ({dev}), {human_size(disk_size)}, {sector}-byte sectors, {disk_info['kind']}; backend {backend.name}")
+    if disk_info["kind"] == "internal":
         log("WARNING: writing an internal drive because allow_internal was set")
 
     report = None
@@ -211,41 +215,50 @@ def run_job(job, emitter, cancel=None):
     prog.plan(plan_phases)
 
     main_mount = None
-    with mountctl.Inhibit(dev):
+    mounted = []            # (partition target, mount dir) still mounted
+    parts = []
+    disk = None
+    tmp_root = None
+    with backend.inhibit(dev):
         try:
-            mountctl.unmount_all(dev, log)
-            fd = mountctl.open_exclusive(dev)
-            os.close(fd)
-            log(f"Current MBR: {bootrec.describe_mbr(dev)}")
-            cur = layout.read_layout(dev)
+            backend.unmount_all(dev, log)
+            backend.check_exclusive(dev)
+            disk = backend.open_disk(dev)
+            log(f"Current MBR: {bootrec.describe_mbr(disk)}")
+            cur = layout.read_layout(disk)
             if cur:
                 log(f"Current partition table: {cur.get('label', '?')} with {len(cur.get('partitions', []))} partition(s)")
 
             if j["bad_blocks"]:
-                _bad_blocks(dev, j["bad_blocks"], prog, cancel, log)
+                prog.phase("badblocks", _("Checking for bad blocks..."))
+                badblocks.check(disk, backend, j["bad_blocks"], prog, cancel, log)
+                # The destructive test wrote patterns over the whole drive: clear again.
+                layout.wipe_disk_signatures(disk, log)
 
             if dd_mode:
                 prog.phase("write", _("Writing image..."))
-                writer.write_image(j["image"], dev, emitter=prog, cancel=cancel, log=log, verify=j["verify"])
+                writer.write_image(j["image"], disk, backend, emitter=prog, cancel=cancel, log=log, verify=j["verify"])
                 prog.phase("finalize", _("Finalizing..."))
-                sync_device(dev)
+                sync_device(disk)
                 return {"ok": True}
             if j["boot_type"] == "none" and j["zero_full"]:
                 prog.phase("write", _("Zeroing drive..."))
-                writer.zero_drive(dev, emitter=prog, cancel=cancel, log=log, full=True)
+                writer.zero_drive(disk, emitter=prog, cancel=cancel, log=log, full=True)
                 return {"ok": True}
+
+            tmp_root = tempfile.mkdtemp(prefix="fubuki-job-", dir=j["temp_dir"])
 
             # ---- partition
             prog.phase("partition", _("Creating partition table..."))
-            layout.wipe_disk_signatures(dev, disk_size, sector, log)
+            layout.wipe_disk_signatures(disk, log)
             cluster = j["cluster_size"] or 0
             parts = layout.plan(disk_size, sector, j["scheme"], j["fs"], bootable, extras,
                                 persistence_size=j["persistence_size"], old_bios_fixes=j["old_bios_fixes"],
                                 cluster_size=cluster, uefi_ntfs_size=os.path.getsize(payload_path("uefi-ntfs.img")))
             for p in parts:
                 log(f"● Creating {p.name} (offset: {p.offset}, size: {human_size(p.size)})")
-            layout.clear_partition_starts(dev, parts, sector)
-            layout.apply(dev, parts, j["scheme"], sector, mbr_uefi_marker=(j["scheme"] == "mbr" and j["target"] == "uefi"), log=log)
+            layout.clear_partition_starts(disk, parts)
+            layout.apply(disk, backend, parts, j["scheme"], mbr_uefi_marker=(j["scheme"] == "mbr" and j["target"] == "uefi"), log=log)
             by_role = {p.role: p for p in parts}
             main = by_role["main"]
             if cancel:
@@ -255,10 +268,11 @@ def run_job(job, emitter, cancel=None):
                 p = by_role["uefi_ntfs"]
                 log("Writing UEFI:NTFS data...")
                 with open(payload_path("uefi-ntfs.img"), "rb") as f:
-                    write_at(p.device, 0, f.read())
-                # The image comes labelled RUFUS_BOOT; the silent-install answer
-                # file refers to this partition by label, so keep both in step.
-                fsmod.set_label(p.device, "fat32", "FUBUKI_BOOT")
+                    # The image comes labelled RUFUS_BOOT; the silent-install
+                    # answer file refers to this partition by label.
+                    data = fsmod.fat_relabel(f.read(), "FUBUKI_BOOT")
+                p.target.pwrite(data, 0)
+                p.target.fsync()
 
             # ---- format
             prog.phase("format", _("Formatting..."))
@@ -266,18 +280,24 @@ def run_job(job, emitter, cancel=None):
                 p = by_role["persistence"]
                 kind = "casper" if report and report["uses_casper"] else "live"
                 log(f"Using {'Ubuntu' if kind == 'casper' else 'Debian'}-like method to enable persistence")
-                fsmod.mkfs(p.device, "ext4", "casper-rw" if kind == "casper" else "persistence", quick=True, log=log, cancel=cancel)
-                linux.setup_persistence(p.device, kind, mountctl.mount_dir_for(dev, "persist"), log)
+                fsmod.mkfs(p.target, "ext4", "casper-rw" if kind == "casper" else "persistence", quick=True, log=log, cancel=cancel,
+                           temp_dir=tmp_root, populate=linux.persistence_populate(kind, tmp_root))
             if "esp" in by_role:
                 # No label on purpose: a labelled ESP has cost people hours (Rufus's words).
-                fsmod.mkfs(by_role["esp"].device, "fat32", "", cluster_size=1024 if sector <= 1024 else 4096,
-                           quick=True, sector_size=sector, log=log, cancel=cancel)
+                fsmod.mkfs(by_role["esp"].target, "fat32", "", cluster_size=1024 if sector <= 1024 else 4096,
+                           quick=True, sector_size=sector, log=log, cancel=cancel, temp_dir=tmp_root,
+                           hidden_sectors=by_role["esp"].offset // sector)
             label = j["label"] or (report["label"] if report else "") or ""
             if j["fs"] not in ("ext2", "ext3", "ext4"):
                 label = fsmod.valid_label(label, j["fs"], disk_size)
-            fsmod.mkfs(main.device, j["fs"], label, cluster_size=cluster, quick=j["quick_format"], sector_size=sector,
-                       size=main.size, emitter=prog, cancel=cancel, log=log)
-            usb_label = fsmod.read_label(main.device) or label
+            # Windows To Go without a device node: the NTFS image is filled by
+            # wimlib in temporary space and copied over afterwards.
+            wtg_image = None
+            wtg_via_image = bool(j["boot_type"] == "image" and j["wintogo"] and not backend.has_device_nodes)
+            wtg_image = fsmod.mkfs(main.target, j["fs"], label, cluster_size=cluster, quick=j["quick_format"], sector_size=sector,
+                                   size=main.size, emitter=prog, cancel=cancel, log=log, hidden_sectors=main.offset // sector,
+                                   temp_dir=j["temp_dir"] if wtg_via_image else tmp_root, keep_image=wtg_via_image)
+            usb_label = fsmod.read_label(main.target, j["fs"]) or label
             if cancel:
                 cancel.check()
 
@@ -295,12 +315,12 @@ def run_job(job, emitter, cancel=None):
             # sets 0x81 as its very last act, after everything is unmounted.
             masquerade_later = bool(needs_masquerading and bootable and j["target"] != "uefi" and j["scheme"] == "mbr")
             if j["scheme"] == "mbr":
-                bootrec.fix_mbr_entries(dev, parts.index(main), j["fs"],
+                bootrec.fix_mbr_entries(disk, parts.index(main), j["fs"],
                                         0x80 if (bootable and j["target"] != "uefi") else None, log)
             if mbr_kind:
-                bootrec.write_mbr_code(dev, mbr_kind, log)
+                bootrec.write_mbr_code(disk, mbr_kind, log)
             if mbr_kind == "msg":
-                bootrec.write_sbr(dev, PROTECTIVE_MESSAGE.encode("cp437", "replace") + b"\x00", 17 * KB, parts[0].offset, log)
+                bootrec.write_sbr(disk, PROTECTIVE_MESSAGE.encode("cp437", "replace") + b"\x00", 17 * KB, parts[0].offset, log)
             pbr_variant = None
             if bootable and j["target"] != "uefi" and not uses_syslinux and not uses_grub2 and j["boot_type"] != "uefi_ntfs":
                 if j["boot_type"] == "freedos":
@@ -314,35 +334,40 @@ def run_job(job, emitter, cancel=None):
                 else:
                     pbr_variant = "std"
             if pbr_variant and j["fs"] in ("fat16", "fat32", "ntfs") and not j["wintogo"]:
-                bootrec.write_pbr(main.device, j["fs"], pbr_variant, log,
+                bootrec.write_pbr(main.target, j["fs"], pbr_variant, log,
                                   drive_id=0x81 if needs_masquerading and mbr_kind == "rufus" else 0x80)
 
             # ---- content
             prog.phase("copy", _("Copying files...") if j["boot_type"] == "image" else _("Preparing volume..."))
-            main_mount = mountctl.mount_dir_for(dev, "main")
             modified = []
             if j["boot_type"] == "image" and j["wintogo"]:
+                _windows_to_go_apply(j, report, main, wtg_image, backend, prog, cancel, log, tmp_root)
+                wtg_image = None
+                main_mount = backend.mount(main.target, j["fs"], "main", log)
+                mounted.append((main.target, main_mount))
                 esp = None
                 if "esp" in by_role:
-                    table = layout.read_layout(dev) or {}
-                    uuids = {p["node"]: p.get("uuid") for p in table.get("partitions", [])}
-                    esp = {"device": by_role["esp"].device, "mount": mountctl.mount_dir_for(dev, "esp"),
-                           "partition_guid": uuids.get(by_role["esp"].device), "disk_guid": table.get("id"),
-                           "main_partition_guid": uuids.get(main.device)}
+                    e = by_role["esp"]
+                    esp = {"mount": backend.mount(e.target, "fat32", "esp", log),
+                           "partition_guid": e.uuid, "disk_guid": e.disk_guid, "main_partition_guid": main.uuid}
+                    mounted.append((e.target, esp["mount"]))
                     if not all(esp.values()):
                         raise UsbError(_("could not read the partition GUIDs back from the new table"))
-                    mountctl.mount(esp["device"], "fat32", esp["mount"], log)
                 try:
-                    _windows_to_go(j, report, main, main_mount, prog, cancel, log, esp)
+                    _windows_to_go_setup(j, report, main_mount, prog, cancel, log, tmp_root, esp)
                 finally:
                     if esp:
-                        mountctl.unmount(esp["mount"], log)
+                        backend.unmount(by_role["esp"].target, esp["mount"], log)
+                        mounted.remove((by_role["esp"].target, esp["mount"]))
                 if pbr_variant and j["fs"] == "ntfs" and j["target"] != "uefi":
-                    mountctl.unmount(main_mount)
-                    bootrec.write_pbr(main.device, "ntfs", "pe", log)
-                    mountctl.mount(main.device, "ntfs", main_mount, log)
+                    backend.unmount(main.target, main_mount, log)
+                    mounted.remove((main.target, main_mount))
+                    bootrec.write_pbr(main.target, "ntfs", "pe", log)
+                    main_mount = backend.mount(main.target, "ntfs", "main", log)
+                    mounted.append((main.target, main_mount))
             else:
-                mountctl.mount(main.device, j["fs"], main_mount, log)
+                main_mount = backend.mount(main.target, j["fs"], "main", log)
+                mounted.append((main.target, main_mount))
                 if j["boot_type"] == "image":
                     reader = open_image(j["image"])
                     with reader:
@@ -361,19 +386,18 @@ def run_job(job, emitter, cancel=None):
             # ---- boot loaders
             if bootable and j["target"] != "uefi" and not j["wintogo"]:
                 if uses_syslinux:
-                    linux.install_syslinux(main.device, main_mount, report or {"syslinux_cfgs": []}, j["fs"], log,
+                    linux.install_syslinux(main.target, main_mount, report or {"syslinux_cfgs": []}, j["fs"], log,
                                            embedded=(j["boot_type"] == "syslinux"),
                                            reactos_path=(report["reactos_path"] if is_reactos else None))
                 elif uses_grub4dos:
-                    linux.install_grub4dos(dev, main_mount, parts[0].offset, from_image=(j["boot_type"] == "image"), log=log)
+                    linux.install_grub4dos(disk, main_mount, parts[0].offset, from_image=(j["boot_type"] == "image"), log=log)
                 elif uses_grub2:
-                    linux.install_grub2(dev, main_mount, report, log)
+                    linux.install_grub2(disk, main.number, j["scheme"], j["fs"], parts[0].offset, main_mount, report, log)
             if j["boot_type"] == "image" and is_windows and not j["wintogo"]:
                 if j["target"] in ("uefi", "dual") and report.get("has_win7_efi"):
                     inst = windows._find(main_mount, *report["wininst"][0]["path"].strip("/").split("/"))
                     if inst:
                         windows.setup_win7_efi(main_mount, inst, log, cancel)
-
 
             if j["boot_type"] == "image" and report["winpe"] and j["target"] != "uefi":
                 # XP-era media: no bootmgr, so it is not "Windows" above.
@@ -391,23 +415,34 @@ def run_job(job, emitter, cancel=None):
                 extract.write_autorun(main_mount, j["label"] or label, log)
 
             prog.phase("finalize", _("Finalizing..."))
-            mountctl.unmount(main_mount, log)
+            backend.unmount(main.target, main_mount, log)
+            mounted.remove((main.target, main_mount))
             main_mount = None
-            sync_device(dev)
+            sync_device(disk)
             if masquerade_later:
-                bootrec.fix_mbr_entries(dev, parts.index(main), None, 0x81, log)
-                sync_device(dev)
+                bootrec.fix_mbr_entries(disk, parts.index(main), None, 0x81, log)
+                sync_device(disk)
                 log("Note: with the masquerading MBR Linux will no longer show the partition; the BIOS does not mind")
-            layout.reread(dev)
+            for p in parts:
+                if p.target:
+                    p.target.close()
+            backend.rescan(disk, (), log)
             log("Done.")
             return {"ok": True, "label": usb_label}
         finally:
-            if main_mount:
+            for target, mdir in list(mounted):
                 try:
-                    mountctl.unmount(main_mount, log)
+                    backend.unmount(target, mdir, log)
                 except Exception:
                     pass
-            sync_device(dev)
+            for p in parts:
+                if p.target:
+                    p.target.close()
+            if disk is not None:
+                sync_device(disk)
+                disk.close()
+            if tmp_root:
+                shutil.rmtree(tmp_root, ignore_errors=True)
 
 
 def _mbr_kind(j, report, bootable, is_windows, uses_syslinux, uses_grub2, needs_masquerading, uses_grub4dos=False):
@@ -430,54 +465,21 @@ def _mbr_kind(j, report, bootable, is_windows, uses_syslinux, uses_grub2, needs_
     return "win7"
 
 
-def _bad_blocks(dev, passes, prog, cancel, log):
-    prog.phase("badblocks", _("Checking for bad blocks..."))
-    patterns = ["0xaa", "0x55", "0xff", "0x00"][:max(1, min(4, passes))]
-    cmd = ["badblocks", "-w", "-s", "-b", "4096"]
-    for p in patterns:
-        cmd += ["-t", p]
-    cmd.append(dev)
-    log("$ " + " ".join(cmd))
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1)
-    if cancel:
-        cancel.track(proc)
-    bad = []
-    try:
-        buf = ""
-        while True:
-            ch = proc.stderr.read(1)
-            if not ch:
-                break
-            buf += ch
-            if ch in "\r\n\b":
-                m = re.search(r"(\d+(?:\.\d+)?)% done", buf)
-                if m:
-                    prog.update(float(m.group(1)) / 100.0)
-                buf = ""
-        out, _err = proc.communicate()
-        bad = [l for l in out.splitlines() if l.strip().isdigit()]
-    finally:
-        if cancel:
-            cancel.untrack(proc)
-    if cancel and cancel.cancelled:
-        raise Cancelled()
-    if bad:
-        raise UsbError(_("bad blocks check found %d bad block(s); this drive should not be trusted") % len(bad))
-    log("Bad blocks: check completed, 0 bad blocks found")
-    # The destructive test wrote patterns over the whole drive: clear again.
-    layout.wipe_disk_signatures(dev, int(open(f"/sys/class/block/{os.path.basename(dev)}/size").read()) * 512, 512, log)
-
-
-def _windows_to_go(j, report, main, main_mount, prog, cancel, log, esp=None):
-    """Extract install.wim to temp space, apply, install boot files."""
+def _windows_to_go_apply(j, report, main, wtg_image, backend, prog, cancel, log, tmp_root):
+    """Extract install.wim to temp space and apply it to the NTFS volume:
+    onto its device node, or into the NTFS image that is then copied to
+    the partition when this backend has no nodes to offer wimlib."""
     inst = report["wininst"][0]
     tmpdir = tempfile.mkdtemp(prefix="fubuki-wtg-", dir=j["temp_dir"])
     try:
+        need = inst["size"] + 64 * MB
+        if wtg_image:
+            need += int(report["win_editions"][0].get("total_bytes") or 0) or 3 * inst["size"]
         free = shutil.disk_usage(tmpdir).free
-        if free < inst["size"] + 64 * MB:
+        if free < need:
             raise UsbError(_("Windows To Go needs %s of temporary space in %s; "
                              "only %s is free (set TMPDIR to a larger location)")
-                           % (human_size(inst['size']), tmpdir, human_size(free)))
+                           % (human_size(need), tmpdir, human_size(free)))
         prog.status(_("Extracting install image..."))
         with open_image(j["image"]) as reader:
             e = reader.get(inst["entry"])
@@ -488,18 +490,37 @@ def _windows_to_go(j, report, main, main_mount, prog, cancel, log, esp=None):
                 done[0] += n
                 prog.update(min(0.3, 0.3 * done[0] / e.size), f"{human_size(done[0])} extracted")
             reader.extract(e, wim_tmp, progress=cb, cancel=cancel)
-            bcd = {}
-            for key, path in (("efi", "efi/microsoft/boot/bcd"), ("bios", "boot/bcd")):
-                be = reader.get(path)
-                if be:
-                    bcd[key] = os.path.join(tmpdir, f"BCD_{key}")
-                    reader.extract(be, bcd[key])
-        if "efi" not in bcd or "bios" not in bcd:
-            raise UsbError(_("image has no BCD template to build the boot store from"))
         index = j["wintogo_index"] or 1
         names = {i["index"]: i["name"] for i in report["win_editions"]}
         log(f"Windows To Go: edition {index} ({names.get(index, '?')})")
-        windows.setup_windows_to_go(None, report, wim_tmp, index, main.device, main_mount, j["target"], bcd,
-                                    set(j["windows_options"]), log=log, emitter=prog, cancel=cancel, temp_dir=j["temp_dir"], esp=esp)
+        if wtg_image:
+            windows.apply_windows_to_go(wim_tmp, index, wtg_image, log=log, emitter=prog, cancel=cancel)
+            os.remove(wim_tmp)
+            prog.status(_("Copying Windows to the drive..."))
+            log(f"Copying the applied NTFS image to {main.device}")
+            fsmod.write_image(wtg_image, main.target, prog, cancel, phase="copy")
+        else:
+            node = backend.device_node(main.target)
+            windows.apply_windows_to_go(wim_tmp, index, node, log=log, emitter=prog, cancel=cancel)
     finally:
+        if wtg_image:
+            try:
+                os.remove(wtg_image)
+            except OSError:
+                pass
         shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def _windows_to_go_setup(j, report, main_mount, prog, cancel, log, tmp_root, esp=None):
+    """Boot files and BCD for the applied volume (mounted at main_mount)."""
+    bcd = {}
+    with open_image(j["image"]) as reader:
+        for key, path in (("efi", "efi/microsoft/boot/bcd"), ("bios", "boot/bcd")):
+            be = reader.get(path)
+            if be:
+                bcd[key] = os.path.join(tmp_root, f"BCD_{key}")
+                reader.extract(be, bcd[key])
+    if "efi" not in bcd or "bios" not in bcd:
+        raise UsbError(_("image has no BCD template to build the boot store from"))
+    windows.setup_windows_to_go(None, report, main_mount, j["target"], bcd, set(j["windows_options"]),
+                                log=log, emitter=prog, cancel=cancel, temp_dir=j["temp_dir"], esp=esp)

@@ -1,22 +1,31 @@
 """Boot loaders for non-Windows media, plus persistence and FreeDOS.
 
-Rufus carries its own copies of ldlinux.sys and GRUB's core.img and patches
-them by hand because Windows has neither. Here the real `extlinux` and
-`grub-install` do the work; what remains is choosing where and keeping the
-Syslinux modules in step with the loader.
+Like Rufus, Fubuki carries its own ldlinux.sys and writes Syslinux by hand
+(syslinux.py), and builds GRUB's core.img with grub-mkimage and places it
+itself; nothing here needs a device node, only the partition's descriptor
+and the mounted volume.
 """
 
 import os
 import shutil
 import subprocess
 
+from . import syslinux as syslinuxmod
 from .util import run, UsbError, payload_path, require_tool, which
 
 from .i18n import _
 
-SYSLINUX_LIB = "/usr/lib/syslinux/bios"
 # Modules a 6.x ldlinux.sys needs beside the ones the ISO already ships.
 SYSLINUX_CORE_MODULES = ("ldlinux.c32", "libcom32.c32", "libutil.c32", "libmenu.c32", "libgpl.c32")
+
+
+def grub_dir():
+    """GRUB's i386-pc modules: FUBUKI_GRUB_DIR (the bundled copy in a
+    sandbox) or the host's."""
+    for d in (os.environ.get("FUBUKI_GRUB_DIR"), "/usr/lib/grub/i386-pc", "/usr/lib/grub2/i386-pc"):
+        if d and os.path.isfile(os.path.join(d, "boot.img")) and os.path.isfile(os.path.join(d, "normal.mod")):
+            return d
+    raise UsbError(_("GRUB's i386-pc modules are not available (install grub)"))
 
 
 def syslinux_cfg_dir(report):
@@ -30,19 +39,20 @@ def syslinux_cfg_dir(report):
     return os.path.dirname(cfgs[0]).strip("/") if cfgs else ""
 
 
-def install_syslinux(part_dev, mount_dir, report, fs, log=None, embedded=False, reactos_path=None):
+def install_syslinux(part, mount_dir, report, fs, log=None, embedded=False, reactos_path=None):
     """Install ldlinux.sys into the config directory and write Syslinux's
-    volume boot record. Works on FAT, NTFS and ext through extlinux.
+    volume boot record. `part` is the partition's BlockTarget, mounted at
+    mount_dir. FAT, NTFS (kernel ntfs3) and ext.
 
     reactos_path: a ReactOS image has no Syslinux of its own; FreeLoader is
     started as a multiboot kernel through mboot.c32 from a one-entry config."""
-    require_tool("extlinux", "syslinux")
+    lib = syslinuxmod.lib_dir()
     cfg_dir = "" if (embedded or reactos_path) else syslinux_cfg_dir(report)
     target_dir = os.path.join(mount_dir, cfg_dir) if cfg_dir else mount_dir
     os.makedirs(target_dir, exist_ok=True)
     if reactos_path:
         for m in ("mboot.c32", "libcom32.c32"):
-            shutil.copy2(os.path.join(SYSLINUX_LIB, m), os.path.join(mount_dir, m))
+            shutil.copy2(os.path.join(lib, m), os.path.join(mount_dir, m))
         with open(os.path.join(mount_dir, "syslinux.cfg"), "w") as f:
             f.write(f"DEFAULT ReactOS\nLABEL ReactOS\n  KERNEL mboot.c32\n  APPEND {reactos_path}\n")
         if log:
@@ -62,62 +72,79 @@ def install_syslinux(part_dev, mount_dir, report, fs, log=None, embedded=False, 
         elif "extlinux.conf" in names:
             shutil.copy2(os.path.join(target_dir, "extlinux.conf"), os.path.join(target_dir, "syslinux.cfg"))
 
-    # The .c32 modules must match ldlinux.sys exactly. Ours is the host's,
-    # so every module the image brought is replaced with the host's build.
+    # The .c32 modules must match ldlinux.sys exactly, so every module the
+    # image brought is replaced with the one from our Syslinux.
     replaced = 0
-    if os.path.isdir(SYSLINUX_LIB):
-        wanted = set(SYSLINUX_CORE_MODULES)
-        for scan_dir in {target_dir, mount_dir}:
-            for n in os.listdir(scan_dir):
-                if n.lower().endswith(".c32"):
-                    wanted.add(n.lower())
-        for n in sorted(wanted):
-            src = os.path.join(SYSLINUX_LIB, n)
-            if not os.path.isfile(src):
-                continue
-            for d in {target_dir, mount_dir} if n in SYSLINUX_CORE_MODULES else {target_dir}:
-                existing = [x for x in os.listdir(d) if x.lower() == n]
-                dst = os.path.join(d, existing[0] if existing else n)
-                if existing or n in SYSLINUX_CORE_MODULES:
-                    shutil.copy2(src, dst)
-                    replaced += 1
+    wanted = set(SYSLINUX_CORE_MODULES)
+    for scan_dir in {target_dir, mount_dir}:
+        for n in os.listdir(scan_dir):
+            if n.lower().endswith(".c32"):
+                wanted.add(n.lower())
+    for n in sorted(wanted):
+        src = os.path.join(lib, n)
+        if not os.path.isfile(src):
+            continue
+        for d in {target_dir, mount_dir} if n in SYSLINUX_CORE_MODULES else {target_dir}:
+            existing = [x for x in os.listdir(d) if x.lower() == n]
+            dst = os.path.join(d, existing[0] if existing else n)
+            if existing or n in SYSLINUX_CORE_MODULES:
+                shutil.copy2(src, dst)
+                replaced += 1
     if log:
-        log(f"Installed Syslinux {syslinux_version()} to /{cfg_dir} (updated {replaced} modules)")
+        log(f"Syslinux {syslinuxmod.version()}: updated {replaced} modules under /{cfg_dir}")
     os.sync()
-    r = run(["extlinux", "--install", target_dir], check=False, log=log)
-    if r.returncode != 0:
-        # extlinux needs FIBMAP; fall back to the syslinux installer on the
-        # raw device, which does its own FAT walking.
-        if fs in ("fat16", "fat32", "ntfs") and which("syslinux"):
-            os.sync()
-            subprocess.run(["umount", mount_dir], check=False)
-            try:
-                run(["syslinux", "--install", "--directory", "/" + cfg_dir if cfg_dir else "/", part_dev], log=log)
-            finally:
-                run(["mount", part_dev, mount_dir], log=log)
-        else:
-            raise UsbError(_("extlinux failed: %s") % (r.stderr or r.stdout).strip().splitlines()[-1:].__str__())
+    syslinuxmod.install(part, mount_dir, cfg_dir, fs, log)
     os.sync()
 
 
 def syslinux_version():
-    try:
-        r = subprocess.run(["syslinux", "--version"], capture_output=True, text=True)
-        return (r.stdout or r.stderr).split()[1]
-    except Exception:
-        return "?"
+    return syslinuxmod.version()
 
 
-def install_grub2(disk_dev, mount_dir, report, log=None):
-    """BIOS GRUB into the MBR gap, modules under /boot/grub/i386-pc on the
-    stick. Images that keep their config in /boot/grub2 get a stub."""
-    require_tool("grub-install", "grub")
+GRUB_FS_MODULE = {"fat16": "fat", "fat32": "fat", "ntfs": "ntfs", "exfat": "exfat",
+                  "ext2": "ext2", "ext3": "ext2", "ext4": "ext2"}
+
+
+def install_grub2(disk, main_number, scheme, fs, first_partition_offset, mount_dir, report, log=None):
+    """BIOS GRUB: boot.img into the MBR (partition table kept), core.img
+    into the gap after it, the modules under /boot/grub/i386-pc on the
+    stick. What grub-install + grub-bios-setup do, without a device node.
+    Images that keep their config in /boot/grub2 get a stub."""
+    from .bootrec import write_sbr
+    require_tool("grub-mkimage", "grub")
+    gdir = grub_dir()
     boot_dir = os.path.join(mount_dir, "boot")
-    os.makedirs(boot_dir, exist_ok=True)
-    run(["grub-install", "--target=i386-pc", f"--boot-directory={boot_dir}", "--force",
-         "--no-floppy", "--recheck", "--skip-fs-probe", disk_dev], log=log)
-    grub_dir = os.path.join(boot_dir, "grub")
-    cfg = os.path.join(grub_dir, "grub.cfg")
+    grub_home = os.path.join(boot_dir, "grub")
+    mod_dir = os.path.join(grub_home, "i386-pc")
+    os.makedirs(mod_dir, exist_ok=True)
+    n = 0
+    for name in os.listdir(gdir):
+        if name.endswith((".mod", ".lst")) or name in ("boot.img", "modinfo.sh"):
+            shutil.copyfile(os.path.join(gdir, name), os.path.join(mod_dir, name))
+            n += 1
+    for font in ("/usr/share/grub/unicode.pf2", os.path.join(gdir, "..", "..", "..", "share", "grub", "unicode.pf2"),
+                 os.path.join(os.environ.get("FUBUKI_GRUB_DIR") or "", "unicode.pf2")):
+        if font and os.path.isfile(font):
+            os.makedirs(os.path.join(grub_home, "fonts"), exist_ok=True)
+            shutil.copyfile(font, os.path.join(grub_home, "fonts", "unicode.pf2"))
+            break
+    prefix = f"(,{'msdos' if scheme == 'mbr' else 'gpt'}{main_number})/boot/grub"
+    core = os.path.join(mod_dir, "core.img")
+    run(["grub-mkimage", "-O", "i386-pc", "-d", gdir, "-p", prefix, "-o", core,
+         "biosdisk", "part_msdos", "part_gpt", GRUB_FS_MODULE.get(fs, "fat")], log=log)
+    with open(core, "rb") as f:
+        core_bytes = f.read()
+    with open(os.path.join(gdir, "boot.img"), "rb") as f:
+        boot = bytearray(f.read()[:0x1B8])
+    # As grub-bios-setup does: no floppy drive check (jumps straight on),
+    # kernel sector 1 and "boot drive = whatever the BIOS says" are
+    # boot.img's defaults.
+    boot[0x66:0x68] = b"\x90\x90"
+    disk.pwrite(bytes(boot), 0)
+    disk.fsync()
+    write_sbr(disk, core_bytes, 512, first_partition_offset, log)
+
+    cfg = os.path.join(grub_home, "grub.cfg")
     alt = os.path.join(boot_dir, "grub2", "grub.cfg")
     if not os.path.exists(cfg) and os.path.exists(alt):
         with open(cfg, "w") as f:
@@ -135,33 +162,29 @@ def install_grub2(disk_dev, mount_dir, report, log=None):
                     log(f"Created /boot/grub/grub.cfg chaining to /{cand}")
                 break
     if log:
-        log(f"Installed GRUB {grub_version()} for BIOS boot")
+        log(f"Installed GRUB {grub_version()} for BIOS boot ({n} module files, core.img {len(core_bytes)} bytes)")
     os.sync()
 
 
 def grub_version():
     try:
-        r = subprocess.run(["grub-install", "--version"], capture_output=True, text=True)
+        r = subprocess.run(["grub-mkimage", "--version"], capture_output=True, text=True)
         return r.stdout.strip().split()[-1]
     except Exception:
         return "?"
 
 
-def setup_persistence(part_dev, kind, mount_tmp, log=None):
-    """Debian-style persistence needs a persistence.conf on the volume;
-    casper just needs the label."""
+def persistence_populate(kind, tmp_dir):
+    """Files the persistence volume must carry: Debian-style persistence
+    needs a persistence.conf; casper only needs the label. Returns a
+    directory for mke2fs -d, or None."""
     if kind != "live":
-        return
-    os.makedirs(mount_tmp, exist_ok=True)
-    run(["mount", part_dev, mount_tmp], log=log)
-    try:
-        with open(os.path.join(mount_tmp, "persistence.conf"), "w") as f:
-            f.write("/ union\n")
-        if log:
-            log("Created persistence.conf")
-    finally:
-        os.sync()
-        run(["umount", mount_tmp], check=False)
+        return None
+    d = os.path.join(tmp_dir, "persistence-root")
+    os.makedirs(d, exist_ok=True)
+    with open(os.path.join(d, "persistence.conf"), "w") as f:
+        f.write("/ union\n")
+    return d
 
 
 FREEDOS_ROOT = ("KERNEL.SYS", "COMMAND.COM")
@@ -205,14 +228,14 @@ def _dos_keyboard():
             "cz": "cz", "hu": "hu", "ru": "ru", "tr": "tr", "gr": "gk", "ca": "cf", "latam": "la"}.get(layout, "us")
 
 
-def install_grub4dos(disk_dev, mount_dir, first_partition_offset, from_image, log=None):
+def install_grub4dos(disk, mount_dir, first_partition_offset, from_image, log=None):
     """Grub4DOS: its MBR code in sector 0 (written by the caller), the rest
     of grldr.mbr right after it, and grldr in the root unless the image
     brought its own. Rufus does the same from the same 0.4.6a release."""
     from .bootrec import write_sbr
     with open(payload_path("grub4dos", "grldr.mbr"), "rb") as f:
         mbr_rest = f.read()[512:]
-    write_sbr(disk_dev, mbr_rest, 512, first_partition_offset, log)
+    write_sbr(disk, mbr_rest, 512, first_partition_offset, log)
     if not from_image:
         shutil.copy2(payload_path("grub4dos", "grldr"), os.path.join(mount_dir, "grldr"))
         if log:

@@ -34,6 +34,16 @@ Arch Linux and derivatives, from the AUR:
 Or from this tree: `makepkg -si` in `fubuki/`, then in `fubuki-ui/` or
 `fubuki-gtk/`. `./release.sh` builds all packages into `dist/`.
 
+Any distribution, no root, with the GNOME window:
+
+- **Flatpak**: `flatpak-builder --user --install build-dir packaging/flatpak/io.github.dresden196.fubuki.yml`
+  (every tool the engine needs is built into it).
+- **AppImage**: `packaging/appimage/build.sh` on Arch, or the `Fubuki-*.AppImage`
+  from a release; make it executable and run it.
+
+Both reach the drive through udisks2, so there is no `pkexec`: the desktop's
+own polkit prompt appears once when the drive is opened.
+
 Fubuki ships with [SakuraOS](https://sakuraos.org).
 
 ## Use
@@ -62,11 +72,19 @@ JSON protocol the windows use.
 
 The engine reads ISO 9660 and UDF itself, so probing an image needs neither
 root nor a mount, and it can read the version index of a 4 GB `install.wim`
-without extracting it. Partitions go through `sfdisk`, file systems through
-`mkfs.*`, boot sectors are the Microsoft, FreeDOS and Syslinux records that
-ms-sys and Rufus write, BIOS boot loaders come from the host's `grub-install`
-and `extlinux`, WIM images through `wimlib`, and the Windows registry and BCD
-stores through `hivex`. See `fubuki/README.md` for the module map.
+without extracting it. Like Rufus, the engine does the disk work itself:
+it writes the MBR or GPT, runs `mkfs.*` on a sparse image and copies only
+the blocks that were touched (so it can tell mkfs the 255/63 geometry the
+BIOS assumes), writes the Microsoft, FreeDOS and Syslinux boot records that
+ms-sys and Rufus write, installs Syslinux from its own `ldlinux.sys` and
+places GRUB's `core.img` by hand. WIM images go through `wimlib`, the
+Windows registry and BCD stores through `hivex`.
+
+The drive itself is reached one of two ways: as root through the device
+nodes (the packaged engine, under `pkexec`), or through udisks2 over D-Bus
+with no root at all, which is what the Flatpak and the AppImage use. Every
+other step is the same code either way. See `fubuki/README.md` for the
+module map and `fubuki/PROTOCOL.md` for the engine protocol.
 
 ## Testing
 

@@ -111,8 +111,9 @@ def _partitions(disk, mounts):
     return parts
 
 
-def list_disks(include_usb_hdd=False, include_all=False, include_loop=False):
-    """Return a list of candidate target disks, safest first.
+def list_disks_sysfs(include_usb_hdd=False, include_all=False, include_loop=False):
+    """Return a list of candidate target disks, safest first (from sysfs
+    and udev; what the native backend uses).
 
     include_usb_hdd: also list non-removable USB drives (Rufus's
                      "List USB Hard Drives").
@@ -193,7 +194,7 @@ def list_disks(include_usb_hdd=False, include_all=False, include_loop=False):
     return disks
 
 
-def is_system_disk(device):
+def is_system_disk_sysfs(device):
     """True when the device (or its parent disk) holds the running system."""
     name = os.path.basename(os.path.realpath(device))
     disks = _system_disks(_mounts())
@@ -205,9 +206,17 @@ def is_system_disk(device):
     return False
 
 
+def list_disks(include_usb_hdd=False, include_all=False, include_loop=False):
+    """Candidate target disks from whichever backend this process uses."""
+    from .backend import get_backend
+    return get_backend().list_disks(include_usb_hdd=include_usb_hdd, include_all=include_all, include_loop=include_loop)
+
+
+def is_system_disk(device):
+    from .backend import get_backend
+    return get_backend().is_system_disk(device)
+
+
 def find_disk(device, **kw):
-    device = os.path.realpath(device)
-    for d in list_disks(include_usb_hdd=True, include_all=True, include_loop=True):
-        if os.path.realpath(d["device"]) == device:
-            return d
-    return None
+    from .backend import get_backend
+    return get_backend().find_disk(device)

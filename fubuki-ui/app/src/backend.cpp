@@ -39,7 +39,7 @@ QString enginePath()
 QStringList passThroughEnv()
 {
     QStringList out;
-    for (const char *name : {"FUBUKI_LIB", "FUBUKI_PAYLOAD", "FUBUKI_LOCALE_DIR",
+    for (const char *name : {"FUBUKI_LIB", "FUBUKI_PAYLOAD", "FUBUKI_LOCALE_DIR", "FUBUKI_BACKEND",
                               "LANGUAGE", "LC_ALL", "LANG"}) {
         if (qEnvironmentVariableIsSet(name)) {
             out << QString::fromLatin1(name) + QLatin1Char('=') + qEnvironmentVariable(name);
@@ -326,6 +326,12 @@ Engine *Backend::rootEngine()
     // Already root: one process can do everything, and a second one would
     // ask for nothing and add nothing.
     if (geteuid() == 0) {
+        return userEngine();
+    }
+    // An engine that can write without root (the udisks2 backend, in a
+    // Flatpak or AppImage) says so in its hello; then there is nothing to
+    // elevate and polkit asks through udisks2 when the drive is opened.
+    if (userEngine()->hello().value(QLatin1String("can_write")).toBool()) {
         return userEngine();
     }
     if (!m_root) {

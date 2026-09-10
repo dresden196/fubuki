@@ -43,11 +43,14 @@ the protocol in `PROTOCOL.md`.
 |---|---|
 | `iso9660.py`, `udf.py` | read ISO images without mounting them (UDF for Windows media) |
 | `image.py` | the probe: what boots how, Windows version and editions, recommended settings |
-| `layout.py` | partition plan and `sfdisk` |
+| `layout.py` | partition plan; writes the MBR or GPT itself |
 | `bootrec.py`, `bootcode.py` | MBR / volume boot records (byte arrays ported from ms-sys) |
-| `fs.py`, `mountctl.py` | mkfs, labels, mounting, keeping udisks away |
+| `blockio.py`, `backend.py` | descriptor-based access to disk and partitions: as root through device nodes (mount(8), a udev rule to keep the desktop away) or through udisks2 over D-Bus with no root |
+| `fs.py` | mkfs on a sparse image, copied to the partition by extents; labels |
+| `syslinux.py` | Syslinux installed by hand: ldlinux.sys sector map, boot record (payload from `tools/build-syslinux.sh`) |
+| `badblocks.py` | destructive write/read pattern scan |
 | `extract.py` | file copy with the config fixes |
-| `linux.py` | Syslinux, GRUB, persistence, FreeDOS |
+| `linux.py` | Syslinux modules, GRUB (grub-mkimage + boot.img/core.img placement), persistence, FreeDOS, Grub4DOS |
 | `unattend.py`, `windows.py`, `wim.py` | Windows customization and Windows To Go |
 | `writer.py` | DD mode |
 | `job.py` | the sequence |

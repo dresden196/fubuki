@@ -11,7 +11,7 @@ left behind: on Linux a disk is a file and a partition is a file, so the
 parts of Rufus that fight drive letters and VDS have no equivalent here.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 APP_NAME = "Fubuki"
 # Where the payload (uefi-ntfs.img, FreeDOS, the setup wrapper) is installed.
 # Overridden by FUBUKI_PAYLOAD for running from the source tree.

@@ -24,7 +24,7 @@ DEFAULT_ENGINE = "/usr/bin/fubuki"
 # gettext uses to pick a language. A child started directly inherits them;
 # pkexec strips the environment, so for the privileged engine they are
 # carried across on the command line.
-PASS_THROUGH_ENV = ("FUBUKI_LIB", "FUBUKI_PAYLOAD", "FUBUKI_LOCALE_DIR",
+PASS_THROUGH_ENV = ("FUBUKI_LIB", "FUBUKI_PAYLOAD", "FUBUKI_LOCALE_DIR", "FUBUKI_BACKEND",
                     "LANGUAGE", "LC_ALL", "LANG")
 
 
@@ -405,6 +405,11 @@ class Backend(GObject.Object):
         # Already root: one process can do everything, and a second one would
         # ask for nothing and add nothing.
         if os.geteuid() == 0:
+            return self.user_engine()
+        # An engine that can write without root (the udisks2 backend, in a
+        # Flatpak or AppImage) says so in its hello; nothing to elevate then,
+        # polkit asks through udisks2 when the drive is opened.
+        if self.user_engine().hello_message.get("can_write"):
             return self.user_engine()
         if self._root is None:
             self._root = self._make_engine(True)

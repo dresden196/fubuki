@@ -7,7 +7,7 @@
 #   FUBUKI_STICK_PERSIST=1 ...   keep what the guest writes (to read its logs afterwards)
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-OUT="$HERE/out"
+OUT="${FUBUKI_OUT:-$HERE/out}"
 MODE="${1:-bios}"
 WAIT="${2:-40}"
 SHOT="${3:-$OUT/stick-$MODE.png}"

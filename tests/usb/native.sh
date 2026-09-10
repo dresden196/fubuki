@@ -11,11 +11,12 @@
 #   sudo tests/usb/native.sh custom /path/img.iso -- --scheme gpt --target uefi --fs ntfs
 #
 # The disk image is tests/usb/out/native-<scenario>.img (sparse, 32 GB).
-# Screenshots land next to it. Set FUBUKI_NO_BOOT=1 to skip the boot checks.
+# Screenshots land next to it. Set FUBUKI_NO_BOOT=1 to skip the boot checks,
+# FUBUKI_OUT=<dir> to run two benches side by side (each needs its own QMP socket).
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
-OUT="$HERE/out"
+OUT="${FUBUKI_OUT:-$HERE/out}"
 SCN="${1:?scenario}"; IMAGE="${2:-}"; shift $(( $# >= 2 ? 2 : $# ))
 [[ "${1:-}" == "--" ]] && shift
 [[ $(id -u) == 0 ]] || { echo "run as root (sudo)" >&2; exit 1; }

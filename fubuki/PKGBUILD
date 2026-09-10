@@ -7,25 +7,24 @@
 # uefi-ntfs.img, FreeDOS, the Windows 11 24H2 setup wrapper, and the boot
 # sector code ported from ms-sys. See fubuki/bootcode.py and payload/.
 pkgname=fubuki
-pkgver=0.1.0
+pkgver=0.2.0
 pkgrel=1
 pkgdesc="Fubuki bootable USB writer: the engine and command line"
 arch=('any')
 url="https://github.com/dresden196/fubuki"
 license=('GPL-3.0-or-later')
 depends=('python' 'python-pyudev' 'util-linux' 'dosfstools' 'ntfs-3g' 'exfatprogs' 'e2fsprogs'
-         # Boot loaders for BIOS boot of Linux images. Rufus carries its own
-         # ldlinux.sys and core.img; here the real installers do the work.
-         'syslinux' 'grub'
+         # BIOS boot of Linux images: Syslinux is carried in the payload and
+         # written by the engine; GRUB's core.img is built with grub-mkimage.
+         'grub'
          # Windows: split install.wim for FAT32, patch boot.wim, apply Windows To Go.
          'wimlib'
          # Editing the offline registry (the TPM/Secure Boot bypass keys, BCD stores).
          'hivex'
-         # Bad block scan, partition re-read.
-         'parted'
          'polkit')
 makedepends=('gettext')
-optdepends=('zstd: writing .zst compressed images')
+optdepends=('zstd: writing .zst compressed images'
+            'python-gobject: the udisks2 backend (writing without root, used by the Flatpak and AppImage)')
 source=('io.github.dresden196.fubuki.policy')
 sha256sums=('SKIP')
 

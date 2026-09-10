@@ -1,4 +1,4 @@
-"""Partition layout: the rules from Rufus's CreatePartition(), applied with sfdisk.
+"""Partition layout: the rules from Rufus's CreatePartition(), written by hand.
 
 The order and sizes are not arbitrary. A UEFI:NTFS partition must be a plain
 data partition on GPT, because Windows Setup refuses to install when the
@@ -8,12 +8,12 @@ unless the user asked for old-BIOS fixes, which aligns to a fake track.
 """
 
 import os
-import random
-import subprocess
+import struct
 import time
 import uuid
+import zlib
 
-from .util import MB, KB, align_up, align_down, run, UsbError
+from .util import MB, KB, align_up, align_down, UsbError, read_at, write_at
 
 from .i18n import _
 
@@ -52,8 +52,11 @@ class Partition:
         self.gpt_type = GPT_MS_DATA
         self.bootable = False
         self.attrs = []
-        self.device = None      # /dev/sdX<n> once created
+        self.device = None      # /dev/sdX<n> once created (a name; see .target)
+        self.target = None      # BlockTarget once created
         self.number = 0
+        self.uuid = None        # GPT unique partition GUID (upper-case string)
+        self.disk_guid = None
 
     def __repr__(self):
         return f"<{self.name} @{self.offset} +{self.size}>"
@@ -167,91 +170,169 @@ def plan(disk_size, sector_size, scheme, fs, bootable=True, extras=(), persisten
     return parts
 
 
-def sfdisk_script(parts, scheme, sector_size, mbr_uefi_marker=False, disk_id=None):
-    lines = [f"label: {'dos' if scheme == 'mbr' else 'gpt'}", "unit: sectors"]
-    if scheme == "mbr":
-        sig = MBR_UEFI_MARKER if mbr_uefi_marker else (disk_id or (int(time.time() * 1000) & 0xFFFFFFFF) or 1)
-        lines.append(f"label-id: 0x{sig:08x}")
-    else:
-        lines.append(f"label-id: {disk_id or str(uuid.uuid4()).upper()}")
-        lines.append("first-lba: 34")
-    for p in parts:
+
+# ------------------------------------------------------------- tables
+
+def _chs(lba, heads=255, spt=63):
+    """CHS bytes for a 255/63 geometry, the one BIOSes assume. The kernel's
+    fake USB geometry (64/32) would make NT-era boot sectors, which read by
+    CHS, read the wrong sectors."""
+    per_cyl = heads * spt
+    if lba >= 1024 * per_cyl:
+        return bytes([0xFE, 0xFF, 0xFF])
+    c, rem = divmod(lba, per_cyl)
+    h, s = divmod(rem, spt)
+    return bytes([h, ((c >> 2) & 0xC0) | (s + 1), c & 0xFF])
+
+
+def build_mbr(parts, sector_size, disk_id=None, existing=None):
+    """The 512-byte MBR for `parts`: boot code kept from `existing` (or
+    zero), a disk id, LBA-typed entries with 255/63 CHS fields."""
+    mbr = bytearray(existing[:0x1B8]) if existing else bytearray(0x1B8)
+    mbr += bytes(512 - len(mbr))
+    struct.pack_into("<I", mbr, 0x1B8, disk_id & 0xFFFFFFFF)
+    mbr[0x1BC:0x1BE] = b"\x00\x00"
+    if len(parts) > 4:
+        raise UsbError(_("too many partitions for an MBR table"))
+    for i, p in enumerate(parts):
+        e = 0x1BE + 16 * i
         start = p.offset // sector_size
         size = p.size // sector_size
-        if scheme == "mbr":
-            fields = [f"start={start}", f"size={size}", f"type={p.mbr_type:02x}"]
-            if p.bootable:
-                fields.append("bootable")
-        else:
-            fields = [f"start={start}", f"size={size}", f"type={p.gpt_type}",
-                      f'name="{p.name}"', f"uuid={str(uuid.uuid4()).upper()}"]
-            if p.attrs:
-                fields.append("attrs=\"" + " ".join(f"GUID:{a}" for a in p.attrs) + "\"")
-        lines.append(", ".join(fields))
-    return "\n".join(lines) + "\n"
+        if start > 0xFFFFFFFF or size > 0xFFFFFFFF:
+            raise UsbError(_("drive too large for an MBR table; use GPT"))
+        mbr[e] = 0x80 if p.bootable else 0x00
+        mbr[e + 1:e + 4] = _chs(start)
+        mbr[e + 4] = p.mbr_type
+        mbr[e + 5:e + 8] = _chs(start + size - 1)
+        struct.pack_into("<II", mbr, e + 8, start, size)
+    mbr[0x1FE:0x200] = b"\x55\xaa"
+    return bytes(mbr)
 
 
-def clear_partition_starts(dev, parts, sector_size):
+def _guid_bytes(s):
+    return uuid.UUID(s).bytes_le
+
+
+def build_gpt(parts, disk_size, sector_size, disk_guid=None):
+    """Protective MBR, primary header + entries, backup entries + header.
+    Returns (mbr, primary_bytes_at_lba1, backup_bytes, backup_offset)."""
+    total = disk_size // sector_size
+    entries = 128
+    entry_size = 128
+    table_bytes = entries * entry_size
+    table_sectors = (table_bytes + sector_size - 1) // sector_size
+    first_usable = 34 if sector_size == 512 else 2 + table_sectors
+    last_usable = total - 2 - table_sectors
+    disk_guid = disk_guid or str(uuid.uuid4()).upper()
+
+    table = bytearray(table_bytes)
+    for i, p in enumerate(parts):
+        e = i * entry_size
+        p.uuid = p.uuid or str(uuid.uuid4()).upper()
+        table[e:e + 16] = _guid_bytes(p.gpt_type)
+        table[e + 16:e + 32] = _guid_bytes(p.uuid)
+        start = p.offset // sector_size
+        end = (p.offset + p.size) // sector_size - 1
+        if start < first_usable or end > last_usable:
+            raise UsbError(_("%s does not fit inside the GPT usable area") % p.name)
+        struct.pack_into("<QQ", table, e + 32, start, end)
+        attrs = 0
+        for bit in p.attrs:
+            attrs |= 1 << bit
+        struct.pack_into("<Q", table, e + 48, attrs)
+        name = p.name.encode("utf-16-le")[:72]
+        table[e + 56:e + 56 + len(name)] = name
+    table_crc = zlib.crc32(bytes(table)) & 0xFFFFFFFF
+
+    def header(my_lba, alt_lba, table_lba):
+        h = bytearray(sector_size)
+        h[0:8] = b"EFI PART"
+        struct.pack_into("<I", h, 8, 0x00010000)
+        struct.pack_into("<I", h, 12, 92)
+        struct.pack_into("<I", h, 16, 0)     # header crc, filled below
+        struct.pack_into("<I", h, 20, 0)
+        struct.pack_into("<QQQQ", h, 24, my_lba, alt_lba, first_usable, last_usable)
+        h[56:72] = _guid_bytes(disk_guid)
+        struct.pack_into("<QIII", h, 72, table_lba, entries, entry_size, table_crc)
+        crc = zlib.crc32(bytes(h[:92])) & 0xFFFFFFFF
+        struct.pack_into("<I", h, 16, crc)
+        return bytes(h)
+
+    backup_table_lba = total - 1 - table_sectors
+    primary = header(1, total - 1, 2) + bytes(table) + bytes(table_sectors * sector_size - table_bytes)
+    backup = bytes(table) + bytes(table_sectors * sector_size - table_bytes) + header(total - 1, 1, backup_table_lba)
+
+    # Protective MBR: one 0xEE entry covering the disk (capped at 32 bits).
+    mbr = bytearray(512)
+    e = 0x1BE
+    mbr[e] = 0x00
+    mbr[e + 1:e + 4] = bytes([0x00, 0x02, 0x00])
+    mbr[e + 4] = 0xEE
+    mbr[e + 5:e + 8] = bytes([0xFF, 0xFF, 0xFF])
+    struct.pack_into("<II", mbr, e + 8, 1, min(total - 1, 0xFFFFFFFF))
+    mbr[0x1FE:0x200] = b"\x55\xaa"
+    return bytes(mbr), primary, backup, backup_table_lba * sector_size, disk_guid
+
+
+def describe(parts, scheme, sector_size):
+    lines = [f"label: {'dos' if scheme == 'mbr' else 'gpt'}"]
+    for p in parts:
+        lines.append(f"{p.name}: start={p.offset // sector_size} size={p.size // sector_size} "
+                     + (f"type={p.mbr_type:02x}" if scheme == "mbr" else f"type={p.gpt_type}")
+                     + (" bootable" if p.bootable and scheme == "mbr" else ""))
+    return lines
+
+
+def clear_partition_starts(disk, parts):
     """Zero the first sectors of each partition so stale superblocks can't
-    confuse the kernel, udev, or mkfs."""
-    zero = bytes(min(128 * KB, sector_size * 256))
-    fd = os.open(dev, os.O_WRONLY)
-    try:
-        for p in parts:
-            n = min(len(zero), p.size)
-            os.pwrite(fd, zero[:n], p.offset)
-        os.fsync(fd)
-    finally:
-        os.close(fd)
+    confuse the kernel, udev, or the desktop."""
+    zero = bytes(min(128 * KB, disk.sector_size * 256))
+    for p in parts:
+        n = min(len(zero), p.size)
+        disk.pwrite(zero[:n], p.offset)
+    disk.fsync()
 
 
-def wipe_disk_signatures(dev, disk_size, sector_size, log=None):
-    """Rufus's ClearMBRGPT: zero the first and last MB, MBR and both GPTs."""
-    fd = os.open(dev, os.O_WRONLY)
-    try:
-        zero = bytes(1 * MB)
-        os.pwrite(fd, zero, 0)
-        os.pwrite(fd, zero[:min(1 * MB, disk_size)], max(0, disk_size - 1 * MB))
-        os.fsync(fd)
-    finally:
-        os.close(fd)
-    subprocess.run(["wipefs", "-a", "-q", dev], check=False,
-                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+def wipe_disk_signatures(disk, log=None):
+    """Rufus's ClearMBRGPT: zero the first and last MB, MBR and both GPTs,
+    and the places other file systems keep their superblocks."""
+    zero = bytes(1 * MB)
+    disk.pwrite(zero, 0)
+    disk.pwrite(zero[:min(1 * MB, disk.size)], max(0, disk.size - 1 * MB))
+    disk.fsync()
 
 
-def apply(dev, parts, scheme, sector_size, mbr_uefi_marker=False, log=None):
-    """Write the partition table and wait for the kernel to see the nodes."""
-    script = sfdisk_script(parts, scheme, sector_size, mbr_uefi_marker)
+def apply(disk, backend, parts, scheme, mbr_uefi_marker=False, log=None):
+    """Write the partition table through `disk` (a BlockTarget), have the
+    kernel re-read it, and open a BlockTarget for each partition."""
+    sector = disk.sector_size
     if log:
-        for line in script.rstrip().splitlines():
-            log("  sfdisk: " + line)
-    # 255 heads / 63 sectors is what every BIOS assumes and what Windows
-    # writes; the kernel's fake geometry for a USB stick (64/32) makes the
-    # CHS fields in the table disagree with the BIOS, and NT-era boot
-    # sectors, which read by CHS, then read the wrong sectors and hang.
-    run(["sfdisk", "-q", "-w", "always", "-W", "always", dev], input=script, log=None)
+        for line in describe(parts, scheme, sector):
+            log("  table: " + line)
     if scheme == "mbr":
-        from .bootrec import fix_mbr_chs
-        fix_mbr_chs(dev, sector_size, log=log)
-    reread(dev)
-    # Resolve /dev nodes for each partition.
+        sig = MBR_UEFI_MARKER if mbr_uefi_marker else ((int(time.time() * 1000) & 0xFFFFFFFF) or 1)
+        disk.pwrite(build_mbr(parts, sector, sig), 0)
+        # No stale GPT may survive behind an MBR: firmware prefers it.
+        disk.pwrite(bytes(sector), sector)
+    else:
+        mbr, primary, backup, backup_off, guid = build_gpt(parts, disk.size, sector)
+        disk.pwrite(mbr, 0)
+        disk.pwrite(primary, sector)
+        disk.pwrite(backup, backup_off)
+        if log:
+            log(f"  disk GUID {guid}")
+        for p in parts:
+            p.disk_guid = guid
+    disk.fsync()
     for i, p in enumerate(parts, 1):
         p.number = i
-        p.device = partition_device(dev, i)
+        p.device = partition_device(disk.path, i)
+    backend.rescan(disk, [p.number for p in parts], log)
     for p in parts:
-        for _try in range(50):
-            if os.path.exists(p.device):
-                break
-            time.sleep(0.1)
-        else:
-            raise UsbError(_("%s did not appear after partitioning") % p.device)
+        p.target = backend.open_partition(disk, p.number)
+        if abs(p.target.size - p.size) > sector:
+            raise UsbError(_("%s came back with size %s, expected %s") % (p.device, p.target.size, p.size))
     return parts
-
-
-def reread(dev):
-    subprocess.run(["partprobe", dev], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    subprocess.run(["blockdev", "--rereadpt", dev], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    subprocess.run(["udevadm", "settle", "--timeout=10"], check=False)
 
 
 def partition_device(dev, number):
@@ -260,13 +341,40 @@ def partition_device(dev, number):
     return f"/dev/{base}{sep}{number}"
 
 
-def read_layout(dev):
-    """Current table as sfdisk sees it (for logging 'what was there before')."""
-    r = run(["sfdisk", "-J", dev], check=False)
-    if r.returncode != 0:
-        return None
-    import json
+def read_layout(disk):
+    """What is on the disk now, for the log: {'label': 'dos'|'gpt',
+    'id': ..., 'partitions': [{'node', 'start', 'size', 'type', 'uuid'}]}."""
     try:
-        return json.loads(r.stdout).get("partitiontable")
-    except ValueError:
+        mbr = read_at(disk, 0, 512)
+    except OSError:
         return None
+    if mbr[0x1FE:0x200] != b"\x55\xaa":
+        return None
+    sector = disk.sector_size
+    if mbr[0x1C2] == 0xEE:
+        hdr = read_at(disk, sector, sector)
+        if hdr[:8] != b"EFI PART":
+            return {"label": "gpt", "id": None, "partitions": []}
+        table_lba, n, esz = struct.unpack_from("<QII", hdr, 72)
+        guid = str(uuid.UUID(bytes_le=bytes(hdr[56:72]))).upper()
+        table = read_at(disk, table_lba * sector, n * esz)
+        parts = []
+        for i in range(n):
+            e = table[i * esz:(i + 1) * esz]
+            if e[:16] == bytes(16):
+                continue
+            start, end = struct.unpack_from("<QQ", e, 32)
+            parts.append({"node": partition_device(disk.path, i + 1), "start": start * sector,
+                          "size": (end - start + 1) * sector,
+                          "type": str(uuid.UUID(bytes_le=bytes(e[:16]))).upper(),
+                          "uuid": str(uuid.UUID(bytes_le=bytes(e[16:32]))).upper()})
+        return {"label": "gpt", "id": guid, "partitions": parts}
+    parts = []
+    for i in range(4):
+        e = 0x1BE + 16 * i
+        if mbr[e + 4] == 0:
+            continue
+        start, size = struct.unpack_from("<II", mbr, e + 8)
+        parts.append({"node": partition_device(disk.path, i + 1), "start": start * sector, "size": size * sector,
+                      "type": f"{mbr[e + 4]:02x}", "bootable": mbr[e] == 0x80})
+    return {"label": "dos", "id": f"0x{struct.unpack_from('<I', mbr, 0x1B8)[0]:08x}", "partitions": parts}

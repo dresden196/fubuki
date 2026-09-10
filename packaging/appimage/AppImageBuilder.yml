@@ -1,0 +1,106 @@
+# Fubuki as an AppImage: the GNOME window, the engine, Python, GTK 4 and
+# every tool the engine shells out to, taken from Arch packages and bundled
+# whole (glibc included), so it runs on any x86_64 Linux with a kernel
+# from this decade. No root: with $APPIMAGE set the engine reaches drives
+# through udisks2 (see fubuki/fubuki/backend.py), which every desktop has.
+#
+#   packaging/appimage/build.sh          -> dist/Fubuki-<version>-x86_64.AppImage
+version: 1
+
+script:
+  - rm -rf AppDir
+  - install -d AppDir/usr/bin AppDir/usr/lib/fubuki AppDir/usr/lib/fubuki-gtk AppDir/usr/share/fubuki
+  - cp -r ../../fubuki/fubuki AppDir/usr/lib/fubuki/
+  - cp -r ../../fubuki/payload/. AppDir/usr/share/fubuki/
+  - install -m755 ../../fubuki/bin/fubuki AppDir/usr/bin/fubuki
+  - cp -r ../../fubuki-gtk/fubuki_gtk AppDir/usr/lib/fubuki-gtk/
+  - install -m755 ../../fubuki-gtk/bin/fubuki-gtk AppDir/usr/bin/fubuki-gtk
+  - for po in ../../fubuki/po/*/fubuki.po; do lang=$(basename $(dirname $po)); install -d AppDir/usr/share/locale/$lang/LC_MESSAGES; msgfmt -o AppDir/usr/share/locale/$lang/LC_MESSAGES/fubuki.mo $po; done
+  - install -Dm644 ../../fubuki/icons/fubuki.svg AppDir/usr/share/icons/hicolor/scalable/apps/fubuki.svg
+  - install -Dm644 ../../fubuki-gtk/io.github.dresden196.fubuki.gtk.desktop AppDir/usr/share/applications/io.github.dresden196.fubuki.gtk.desktop
+
+AppDir:
+  path: ./AppDir
+  app_info:
+    id: io.github.dresden196.fubuki.gtk
+    name: Fubuki
+    icon: fubuki
+    version: !ENV ${FUBUKI_VERSION}
+    exec: usr/bin/python3
+    exec_args: "$APPDIR/usr/bin/fubuki-gtk $@"
+
+  pacman:
+    Architecture: x86_64
+    options:
+      SigLevel: Required DatabaseOptional
+    repositories:
+      core:
+        - https://geo.mirror.pkgbuild.com/core/os/x86_64
+      extra:
+        - https://geo.mirror.pkgbuild.com/extra/os/x86_64
+    include:
+      - python
+      - python-gobject
+      - gtk4
+      - libadwaita
+      - glib2
+      - gdk-pixbuf2
+      - librsvg
+      - adwaita-icon-theme
+      - hicolor-icon-theme
+      - shared-mime-info
+      - dosfstools
+      - ntfs-3g
+      - exfatprogs
+      - e2fsprogs
+      - wimlib
+      - hivex
+      - grub
+      - zstd
+      - gettext
+    exclude:
+      - mesa
+      - vulkan-icd-loader
+      - libglvnd
+      - systemd
+      - systemd-libs
+      - dbus
+      - util-linux
+      - coreutils
+      - bash
+      - filesystem
+      - linux-api-headers
+      - perl
+      - gcc-libs-multilib
+
+  after_bundle:
+    # dbus's setuid helper comes along as a dependency and cannot be read back.
+    - rm -f AppDir/usr/lib/dbus-daemon-launch-helper
+    - chmod -R u+rwX AppDir
+
+  runtime:
+    env:
+      PYTHONHOME: '${APPDIR}/usr'
+      PYTHONPATH: '${APPDIR}/usr/lib/python3.14/site-packages:${APPDIR}/usr/lib/python3.14'
+      GI_TYPELIB_PATH: '${APPDIR}/usr/lib/girepository-1.0'
+      GDK_PIXBUF_MODULEDIR: '${APPDIR}/usr/lib/gdk-pixbuf-2.0/2.10.0/loaders'
+      GSETTINGS_SCHEMA_DIR: '${APPDIR}/usr/share/glib-2.0/schemas'
+      XDG_DATA_DIRS: '${APPDIR}/usr/share:/usr/local/share:/usr/share'
+      FUBUKI_ENGINE: '${APPDIR}/usr/bin/fubuki'
+      FUBUKI_LIB: '${APPDIR}/usr/lib/fubuki'
+      FUBUKI_GTK_LIB: '${APPDIR}/usr/lib/fubuki-gtk'
+      FUBUKI_PAYLOAD: '${APPDIR}/usr/share/fubuki'
+      FUBUKI_SYSLINUX: '${APPDIR}/usr/share/fubuki/syslinux'
+      FUBUKI_GRUB_DIR: '${APPDIR}/usr/lib/grub/i386-pc'
+      FUBUKI_LOCALE_DIR: '${APPDIR}/usr/share/locale'
+      FUBUKI_GTK_LOCALE_DIR: '${APPDIR}/usr/share/locale'
+
+  test:
+    fedora:
+      image: appimagecrafters/tests-env:fedora-30
+      command: ./AppRun --help
+      use_host_x: false
+
+AppImage:
+  arch: x86_64
+  update-information: None

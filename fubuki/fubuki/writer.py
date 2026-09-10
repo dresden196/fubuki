@@ -83,14 +83,15 @@ def open_stream(path):
     return open(path, "rb"), size
 
 
-def write_image(image_path, dev, emitter=None, cancel=None, log=None, chunk=4 * MB, verify=False):
-    disk_size = int(open(f"/sys/class/block/{os.path.basename(os.path.realpath(dev))}/size").read()) * 512
+def write_image(image_path, disk, backend=None, emitter=None, cancel=None, log=None, chunk=4 * MB, verify=False):
+    """DD mode: the image, decompressed on the fly, straight onto the
+    disk (a BlockTarget)."""
+    disk_size = disk.size
     src, expected = open_stream(image_path)
     if expected and expected > disk_size:
         raise UsbError(_("image is %s but the drive holds only %s") % (human_size(expected), human_size(disk_size)))
     if log:
-        log(f"Writing {os.path.basename(image_path)}" + (f" ({human_size(expected)})" if expected else "") + f" to {dev}")
-    fd = os.open(dev, os.O_WRONLY | os.O_DIRECT if False else os.O_WRONLY)
+        log(f"Writing {os.path.basename(image_path)}" + (f" ({human_size(expected)})" if expected else "") + f" to {disk.path}")
     written = 0
     limit = expected if expected else None
     try:
@@ -109,17 +110,13 @@ def write_image(image_path, dev, emitter=None, cancel=None, log=None, chunk=4 * 
                 buf = buf + bytes(512 - len(buf) % 512)
             if written + len(buf) > disk_size:
                 raise UsbError(_("image is larger than the drive"))
-            view = memoryview(buf)
-            while view:
-                n = os.write(fd, view)
-                view = view[n:]
+            disk.pwrite(buf, written)
             written += len(buf)
             if emitter:
                 emitter.progress("write", (written / expected) if expected else None,
                                  f"{human_size(written)} written")
-        os.fsync(fd)
+        disk.fsync()
     finally:
-        os.close(fd)
         try:
             src.close()
         except Exception:
@@ -127,31 +124,27 @@ def write_image(image_path, dev, emitter=None, cancel=None, log=None, chunk=4 * 
     if log:
         log(f"Wrote {human_size(written)}")
     if verify and not detect_compression(image_path):
-        _verify(image_path, dev, written, emitter, cancel, log)
-    sync_device(dev)
-    subprocess.run(["blockdev", "--rereadpt", dev], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    subprocess.run(["partprobe", dev], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    subprocess.run(["udevadm", "settle", "--timeout=10"], check=False)
+        _verify(image_path, disk, backend, written, emitter, cancel, log)
+    sync_device(disk)
+    if backend:
+        backend.rescan(disk, (), log)
     return written
 
 
-def _verify(image_path, dev, length, emitter, cancel, log):
+def _verify(image_path, disk, backend, length, emitter, cancel, log):
     """Read back and compare, the way balenaEtcher does. Drops the page
     cache first so we compare against the flash, not RAM."""
-    try:
-        with open("/proc/sys/vm/drop_caches", "w") as f:
-            f.write("1\n")
-    except OSError:
-        pass
+    if backend:
+        backend.drop_cache(disk)
     chunk = 4 * MB
     done = 0
-    with open(image_path, "rb") as a, open(dev, "rb") as b:
+    with open(image_path, "rb") as a:
         while done < length:
             if cancel:
                 cancel.check()
             n = min(chunk, length - done)
             x = a.read(n)
-            y = b.read(n)
+            y = disk.pread(n, done)
             if x != y[:len(x)]:
                 raise UsbError(_("verification failed at offset %s: the drive does not hold what was written") % done)
             done += n
@@ -161,29 +154,24 @@ def _verify(image_path, dev, length, emitter, cancel, log):
         log("Verification passed")
 
 
-def zero_drive(dev, emitter=None, cancel=None, log=None, full=True):
+def zero_drive(disk, emitter=None, cancel=None, log=None, full=True):
     """Erase: full zero of the drive, or just the first and last 4 MB."""
-    disk_size = int(open(f"/sys/class/block/{os.path.basename(os.path.realpath(dev))}/size").read()) * 512
+    disk_size = disk.size
     zero = bytes(4 * MB)
-    fd = os.open(dev, os.O_WRONLY)
-    try:
-        if not full:
-            os.write(fd, zero[:min(len(zero), disk_size)])
-            os.lseek(fd, max(0, disk_size - len(zero)), os.SEEK_SET)
-            os.write(fd, zero[:min(len(zero), disk_size)])
-        else:
-            done = 0
-            while done < disk_size:
-                if cancel:
-                    cancel.check()
-                n = min(len(zero), disk_size - done)
-                os.write(fd, zero[:n])
-                done += n
-                if emitter:
-                    emitter.progress("write", done / disk_size, f"{human_size(done)} zeroed")
-        os.fsync(fd)
-    finally:
-        os.close(fd)
-    sync_device(dev)
+    if not full:
+        disk.pwrite(zero[:min(len(zero), disk_size)], 0)
+        disk.pwrite(zero[:min(len(zero), disk_size)], max(0, disk_size - len(zero)))
+    else:
+        done = 0
+        while done < disk_size:
+            if cancel:
+                cancel.check()
+            n = min(len(zero), disk_size - done)
+            disk.pwrite(zero[:n], done)
+            done += n
+            if emitter:
+                emitter.progress("write", done / disk_size, f"{human_size(done)} zeroed")
+    disk.fsync()
+    sync_device(disk)
     if log:
         log("Drive zeroed" if full else "Partition table and signatures cleared")

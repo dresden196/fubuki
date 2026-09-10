@@ -1,7 +1,7 @@
 # Maintainer: Dresden Wildey <dresden196@gmail.com>
 pkgname=fubuki-ui
 _base=fubuki
-pkgver=0.1.1
+pkgver=0.2.0
 pkgrel=1
 pkgdesc="Bootable USB writer in the spirit of Rufus: the KDE window"
 arch=('x86_64')
@@ -21,7 +21,6 @@ build() {
 package() {
     cd "$srcdir/$_base-$pkgver/fubuki-ui"
     DESTDIR="$pkgdir" cmake --install "$srcdir/build"
-    install -Dm644 icons/fubuki.svg "$pkgdir/usr/share/icons/hicolor/scalable/apps/fubuki.svg"
     install -Dm644 io.github.dresden196.fubuki.desktop \
         "$pkgdir/usr/share/applications/io.github.dresden196.fubuki.desktop"
 }

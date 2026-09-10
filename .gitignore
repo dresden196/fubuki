@@ -11,3 +11,8 @@ build/
 /fubuki-gtk/pkg/
 *.pkg.tar.zst
 dist/
+/packaging/appimage/AppDir/
+/packaging/appimage/appimage-build/
+*.AppImage
+/tests/usb/out2/
+/.flatpak-builder/

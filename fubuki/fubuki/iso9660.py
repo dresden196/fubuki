@@ -11,6 +11,7 @@ import struct
 from datetime import datetime, timezone
 
 SECTOR = 2048
+JOLIET_NAME_LIMIT = 64
 
 
 class IsoEntry:
@@ -234,6 +235,12 @@ class Iso9660:
                 if rr_name:
                     name = rr_name
                     self.rockridge = True
+            elif joliet and self._use_rr and len(name) >= JOLIET_NAME_LIMIT and not (flags & 0x02):
+                # Joliet cuts names at 64 characters (103 with -joliet-long);
+                # the Rock Ridge tree has the real one, and md5sum.txt uses it.
+                full = self._rr_names_by_lba().get(elba)
+                if full and len(full) > len(name):
+                    name = full
             is_dir = bool(flags & 0x02)
             path = f"{prefix}/{name}" if prefix else name
             if pending and pending.name == name and not is_dir:
@@ -249,6 +256,32 @@ class Iso9660:
             pending = entry if (flags & 0x80) and not is_dir else None
             if is_dir:
                 self._walk(elba, elen, path, joliet, seen)
+
+    def _rr_names_by_lba(self):
+        """{extent lba: Rock Ridge name} for every file in the ISO 9660 tree,
+        built once, only when a Joliet name looks truncated."""
+        if getattr(self, "_rr_map", None) is None:
+            self._rr_map = {}
+            if self._pvd_root is not None:
+                _, lba, length, _, _, _ = self._parse_record(self._pvd_root, False)
+                self._rr_map_walk(lba, length, set())
+        return self._rr_map
+
+    def _rr_map_walk(self, lba, length, seen):
+        if lba in seen:
+            return
+        seen.add(lba)
+        for name, elba, elen, flags, mtime, su in self._read_dir(lba, length, False):
+            if name in (".", ".."):
+                continue
+            if su:
+                rr_name, _link, _mode = self._rock_ridge(su)
+                if rr_name:
+                    name = rr_name
+            if flags & 0x02:
+                self._rr_map_walk(elba, elen, seen)
+            else:
+                self._rr_map.setdefault(elba, name)
 
     def get(self, path):
         path = path.strip("/")

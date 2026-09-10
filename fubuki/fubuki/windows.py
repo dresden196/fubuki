@@ -464,25 +464,29 @@ def _set_san_policy(system_hive, log=None):
         log("Set internal drives offline (partmgr SanPolicy=4)")
 
 
-def setup_windows_to_go(reader, report, wim_temp, index, main_dev, mount_dir, target, iso_bcd_paths,
-                        options, log=None, emitter=None, cancel=None, temp_dir=None, esp=None):
-    """Apply install.wim[index] to the NTFS partition and make it boot.
-
-    wim_temp: path of install.wim/.esd already extracted to temporary space.
-    target: 'bios' | 'uefi' | 'dual'.
-    Without `esp`, boot files live on the NTFS partition itself and UEFI:NTFS
-    chains into them (Rufus's no-ESP layout, MBR only): the BCD's device is
-    "boot". With `esp` = {"device", "mount", "partition_guid", "disk_guid",
-    "main_partition_guid"} (GPT), the EFI files and BCD go on the ESP and the
-    store names the partitions by GUID, like bcdboot does.
-    """
+def apply_windows_to_go(wim_temp, index, apply_target, log=None, emitter=None, cancel=None):
+    """Apply install.wim[index] onto `apply_target`: the NTFS partition's
+    device node, or a file holding the NTFS image when there is no node
+    to give wimlib (udisks backend). Through libntfs-3g either way, so
+    every Windows attribute, ACL and reparse point survives."""
     if emitter:
         emitter.status(_("Applying Windows image (this takes a while)..."))
     if log:
-        log(f"Windows To Go: applying image index {index} to {main_dev}")
-    wimmod.apply(wim_temp, index, main_dev, log=log, cancel=cancel, emitter=emitter, ntfs_device=True)
+        log(f"Windows To Go: applying image index {index} to {apply_target}")
+    wimmod.apply(wim_temp, index, apply_target, log=log, cancel=cancel, emitter=emitter, ntfs_device=True)
 
-    _try_mount(main_dev, mount_dir, log)
+
+def setup_windows_to_go(reader, report, mount_dir, target, iso_bcd_paths,
+                        options, log=None, emitter=None, cancel=None, temp_dir=None, esp=None):
+    """Make an applied Windows To Go volume (mounted at mount_dir) boot.
+
+    target: 'bios' | 'uefi' | 'dual'.
+    Without `esp`, boot files live on the NTFS partition itself and UEFI:NTFS
+    chains into them (Rufus's no-ESP layout, MBR only): the BCD's device is
+    "boot". With `esp` = {"mount", "partition_guid", "disk_guid",
+    "main_partition_guid"} (GPT), the EFI files and BCD go on the ESP and the
+    store names the partitions by GUID, like bcdboot does.
+    """
     win = _find(mount_dir, "Windows")
     if not win:
         raise UsbError(_("applied image has no Windows directory"))
@@ -544,15 +548,3 @@ def setup_windows_to_go(reader, report, wim_temp, index, main_dev, mount_dir, ta
                         log(f"WARNING: could not set SanPolicy: {ex}")
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
-
-
-def _try_mount(dev, mount_dir, log=None):
-    """Mount an NTFS volume: kernel ntfs3 first, ntfs-3g as fallback."""
-    os.makedirs(mount_dir, exist_ok=True)
-    for cmd in (["mount", "-t", "ntfs3", "-o", "windows_names", dev, mount_dir],
-                ["ntfs-3g", "-o", "windows_names", dev, mount_dir],
-                ["mount", "-t", "ntfs-3g", dev, mount_dir]):
-        r = run(cmd, check=False, log=log)
-        if r.returncode == 0:
-            return
-    raise UsbError(_("could not mount %s (NTFS): neither ntfs3 nor ntfs-3g worked") % dev)

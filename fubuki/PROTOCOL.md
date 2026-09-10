@@ -1,14 +1,22 @@
 # fubuki engine protocol
 
 The window runs the engine as `pkexec /usr/bin/fubuki serve` (root is
-needed to write a drive) and talks JSON, one object per line, over its
-stdin/stdout. Unprivileged commands (`devices`, `probe`, `hash`) also work
-without pkexec: `fubuki serve` as the user.
+needed to write a drive through the device nodes) and talks JSON, one
+object per line, over its stdin/stdout. Unprivileged commands (`devices`,
+`probe`, `hash`) also work without pkexec: `fubuki serve` as the user.
 
 On start the engine prints one line:
 
     {"event":"hello","app":"Fubuki","version":"0.1.0","root":true,
+     "backend":"native","can_write":true,
      "windows_options":[...all option names...],"windows_defaults":[...]}
+
+`backend` is how this engine reaches drives: `native` (device nodes, needs
+root) or `udisks` (udisks2 over D-Bus, no root; polkit asks when the drive
+is opened). `can_write` says whether `write` will be accepted. A window
+should ask an unprivileged engine first and only start a `pkexec` one when
+`can_write` is false; inside a Flatpak or AppImage the engine picks the
+udisks backend by itself, and `FUBUKI_BACKEND=native|udisks` forces one.
 
 ## Requests
 
