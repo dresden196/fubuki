@@ -29,6 +29,30 @@ def _install_css():
     if display is not None:
         Gtk.StyleContext.add_provider_for_display(display, provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
 
+
+def _fix_fractional_text(window):
+    """On a display scaled by a non-integer factor (Plasma at 115 %, say)
+    GTK renders hinted glyphs on a 2x grid and the compositor resamples
+    them, which drops one-pixel stems (T, E, I lose their strokes).
+    Unhinted text resamples cleanly, so hinting goes off in that case."""
+    try:
+        surface = window.get_surface()
+        scale = surface.get_scale() if surface is not None else 1.0
+    except Exception:
+        return
+    if abs(scale - round(scale)) < 0.01:
+        return
+    settings = Gtk.Settings.get_default()
+    if settings is None:
+        return
+    try:
+        settings.set_property("gtk-font-rendering", Gtk.FontRendering.MANUAL)
+    except Exception:
+        pass
+    settings.set_property("gtk-xft-hinting", 0)
+    settings.set_property("gtk-xft-hintstyle", "hintnone")
+    settings.set_property("gtk-xft-antialias", 1)
+
 from . import dialogs  # noqa: E402
 from .engine import human_size  # noqa: E402
 from .i18n import _, fmt, ngettext, pgettext  # noqa: E402
@@ -44,6 +68,7 @@ class ChoiceDrop(Gtk.DropDown):
     def __init__(self, on_change):
         super().__init__(hexpand=True)
         self._values = []
+        self._texts = []
         self._updating = False
         self._on_change = on_change
         self.set_model(Gtk.StringList())
@@ -52,8 +77,13 @@ class ChoiceDrop(Gtk.DropDown):
     def set_choices(self, choices, value):
         self._updating = True
         try:
+            texts = [t for t, _v in choices]
             self._values = [v for _t, v in choices]
-            self.set_model(Gtk.StringList.new([t for t, _v in choices]))
+            # Only replace the model when the entries changed: rebuilding it
+            # from inside the drop-down's own selection signal makes GTK abort.
+            if texts != self._texts:
+                self._texts = texts
+                self.set_model(Gtk.StringList.new(texts))
             self._select(value)
         finally:
             self._updating = False
@@ -80,7 +110,14 @@ class ChoiceDrop(Gtk.DropDown):
     def _changed(self, *_args):
         if self._updating:
             return
-        self._on_change(self.get_value())
+        # Leave GTK's selection signal before the handler touches widgets
+        # (the coupling rules may change this very drop-down's choices).
+        value = self.get_value()
+        GLib.idle_add(self._deliver, value)
+
+    def _deliver(self, value):
+        self._on_change(value)
+        return GLib.SOURCE_REMOVE
 
 
 def heading(text, first=False):
@@ -123,6 +160,7 @@ class FubukiWindow(Adw.ApplicationWindow):
     def __init__(self, app, backend):
         _install_css()
         super().__init__(application=app, title="Fubuki", default_width=740, default_height=860)
+        self.connect("realize", _fix_fractional_text)
         self.backend = backend
         self._updating = False
 

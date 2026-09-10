@@ -1,6 +1,6 @@
 [Desktop Entry]
 Type=Application
-Name=Fubuki
+Name=Fubuki (GTK)
 GenericName=Bootable USB Creator
 Comment=Write bootable USB drives from ISO and disk images
 Exec=fubuki-gtk %f
