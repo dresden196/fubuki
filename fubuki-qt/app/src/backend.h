@@ -104,6 +104,16 @@ class Backend : public QObject
     Q_PROPERTY(QString engineVersion READ engineVersion NOTIFY helloChanged)
     Q_PROPERTY(QVariantList clusterChoices READ clusterChoices NOTIFY clustersChanged)
     Q_PROPERTY(int clusterDefault READ clusterDefault NOTIFY clustersChanged)
+    // The Windows/UEFI-Shell download picker. Versions, releases and editions
+    // are local; languages and links are the two network steps, so a busy flag
+    // and a last-error string sit alongside them.
+    Q_PROPERTY(QVariantList winVersionsList READ winVersionsList NOTIFY winVersionsChanged)
+    Q_PROPERTY(QVariantList winReleasesList READ winReleasesList NOTIFY winReleasesChanged)
+    Q_PROPERTY(QVariantList winEditionsList READ winEditionsList NOTIFY winEditionsChanged)
+    Q_PROPERTY(QVariantList winLanguagesList READ winLanguagesList NOTIFY winLanguagesChanged)
+    Q_PROPERTY(QVariantList winLinksList READ winLinksList NOTIFY winLinksChanged)
+    Q_PROPERTY(bool winBusy READ winBusy NOTIFY winBusyChanged)
+    Q_PROPERTY(QString winError READ winError NOTIFY winErrorChanged)
 
 public:
     explicit Backend(QObject *parent = nullptr);
@@ -130,6 +140,13 @@ public:
     QString engineVersion() const { return m_engineVersion; }
     QVariantList clusterChoices() const { return m_clusterChoices; }
     int clusterDefault() const { return m_clusterDefault; }
+    QVariantList winVersionsList() const { return m_winVersions; }
+    QVariantList winReleasesList() const { return m_winReleases; }
+    QVariantList winEditionsList() const { return m_winEditions; }
+    QVariantList winLanguagesList() const { return m_winLanguages; }
+    QVariantList winLinksList() const { return m_winLinks; }
+    bool winBusy() const { return m_winBusy; }
+    QString winError() const { return m_winError; }
 
     Q_INVOKABLE void refreshDevices();
     Q_INVOKABLE void probe(const QString &path);
@@ -143,6 +160,20 @@ public:
     // job it is about to send. Rufus logs the same, and it is what makes a
     // report from a user readable.
     Q_INVOKABLE void note(const QString &text);
+
+    // The download picker's engine-facing steps. versions/releases/editions
+    // are local and instant; languages/links go to Microsoft and raise winBusy.
+    Q_INVOKABLE void winVersions();
+    Q_INVOKABLE void winReleases(int version);
+    Q_INVOKABLE void winEditions(int version, int release);
+    Q_INVOKABLE void winLanguages(int version, const QVariantList &editionIds);
+    Q_INVOKABLE void winLinks(int version, int release, const QVariantList &editionIds,
+                              const QVariantList &languageData);
+    // Streams into the main window's progress area exactly as a write does, on
+    // the unprivileged engine -- fetching an ISO needs no root.
+    Q_INVOKABLE void download(const QString &url, const QString &dest);
+    // The default save name Microsoft's link carries, under the Downloads dir.
+    Q_INVOKABLE QUrl suggestedSaveUrl(const QString &downloadUrl) const;
 
     Q_INVOKABLE QString localFile(const QUrl &url) const;
     Q_INVOKABLE QString humanSize(double bytes) const;
@@ -165,6 +196,16 @@ Q_SIGNALS:
     void logChanged();
     void helloChanged();
     void clustersChanged();
+    void winVersionsChanged();
+    void winReleasesChanged();
+    void winEditionsChanged();
+    void winLanguagesChanged();
+    void winLinksChanged();
+    void winBusyChanged();
+    void winErrorChanged();
+    // A finished download, so the window can adopt the ISO as its boot
+    // selection the same way the file picker does.
+    void downloadFinished(const QString &path);
 
 private:
     Engine *userEngine();
@@ -205,4 +246,16 @@ private:
     QVariantList m_clusterChoices;
     int m_clusterDefault = 0;
     int m_clusterRequest = 0;
+
+    QVariantList m_winVersions;
+    QVariantList m_winReleases;
+    QVariantList m_winEditions;
+    QVariantList m_winLanguages;
+    QVariantList m_winLinks;
+    QString m_winToken;
+    bool m_winBusy = false;
+    QString m_winError;
+    // Set while a win_download runs so cancel() knows to reach the user engine
+    // even when a privileged engine from an earlier write is still around.
+    bool m_downloading = false;
 };

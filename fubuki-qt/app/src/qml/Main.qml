@@ -338,6 +338,16 @@ QQC2.ApplicationWindow {
         id: checksumDialog
     }
 
+    DownloadDialog {
+        id: downloadDialog
+    }
+    Connections {
+        target: backend
+        // A finished download becomes the boot selection, the same as opening
+        // it from the file picker would.
+        function onDownloadFinished(path) { root.selectImage(path) }
+    }
+
     QQC2.Dialog {
         id: closeDialog
         parent: root.contentItem
@@ -429,6 +439,23 @@ QQC2.ApplicationWindow {
                     text: i18nc("@action:button", "SELECT")
                     enabled: !root.busy
                     onClicked: fileDialog.open()
+                }
+                // Rufus's split "Select" button: the arrow drops a menu whose
+                // one entry downloads an ISO from Microsoft instead.
+                QQC2.ToolButton {
+                    icon.name: "arrow-down"
+                    enabled: !root.busy
+                    onClicked: selectMenu.popup()
+                    QQC2.ToolTip.text: i18n("Download a Windows or UEFI Shell ISO")
+                    QQC2.ToolTip.visible: hovered
+                    QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
+                    QQC2.Menu {
+                        id: selectMenu
+                        QQC2.MenuItem {
+                            text: i18nc("@action:inmenu", "Download")
+                            onTriggered: downloadDialog.open()
+                        }
+                    }
                 }
             }
 

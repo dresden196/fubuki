@@ -2,11 +2,13 @@
 
 #include <KLocalizedString>
 
+#include <QDir>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonValue>
 #include <QLoggingCategory>
 #include <QSettings>
+#include <QStandardPaths>
 #include <QTimer>
 #include <QUrl>
 
@@ -523,6 +525,220 @@ void Backend::clusters(const QString &fs, double size)
         });
 }
 
+// --------------------------------------------------------- Windows download
+
+void Backend::winVersions()
+{
+    userEngine()->request(
+        QJsonObject{{QLatin1String("cmd"), QLatin1String("win_versions")}},
+        [this](const QJsonObject &msg) {
+            if (msg.contains(QLatin1String("result"))) {
+                m_winVersions = msg.value(QLatin1String("result")).toArray().toVariantList();
+                Q_EMIT winVersionsChanged();
+            } else if (msg.contains(QLatin1String("error"))) {
+                m_winError = msg.value(QLatin1String("error")).toString();
+                Q_EMIT winErrorChanged();
+            }
+        });
+}
+
+void Backend::winReleases(int version)
+{
+    userEngine()->request(
+        QJsonObject{{QLatin1String("cmd"), QLatin1String("win_releases")},
+                    {QLatin1String("version"), version}},
+        [this](const QJsonObject &msg) {
+            if (msg.contains(QLatin1String("result"))) {
+                m_winReleases = msg.value(QLatin1String("result")).toArray().toVariantList();
+                Q_EMIT winReleasesChanged();
+            } else if (msg.contains(QLatin1String("error"))) {
+                m_winError = msg.value(QLatin1String("error")).toString();
+                Q_EMIT winErrorChanged();
+            }
+        });
+}
+
+void Backend::winEditions(int version, int release)
+{
+    userEngine()->request(
+        QJsonObject{{QLatin1String("cmd"), QLatin1String("win_editions")},
+                    {QLatin1String("version"), version},
+                    {QLatin1String("release"), release},
+                    {QLatin1String("locale"), QLatin1String("en-US")}},
+        [this](const QJsonObject &msg) {
+            if (msg.contains(QLatin1String("result"))) {
+                m_winEditions = msg.value(QLatin1String("result")).toArray().toVariantList();
+                Q_EMIT winEditionsChanged();
+            } else if (msg.contains(QLatin1String("error"))) {
+                m_winError = msg.value(QLatin1String("error")).toString();
+                Q_EMIT winErrorChanged();
+            }
+        });
+}
+
+void Backend::winLanguages(int version, const QVariantList &editionIds)
+{
+    m_winBusy = true;
+    m_winError.clear();
+    Q_EMIT winBusyChanged();
+    Q_EMIT winErrorChanged();
+
+    userEngine()->request(
+        QJsonObject{{QLatin1String("cmd"), QLatin1String("win_languages")},
+                    {QLatin1String("version"), version},
+                    {QLatin1String("edition_ids"), QJsonArray::fromVariantList(editionIds)},
+                    {QLatin1String("locale"), QLatin1String("en-US")}},
+        [this](const QJsonObject &msg) {
+            const QString ev = eventOf(msg);
+            if (ev == QLatin1String("log")) {
+                appendLog(msg.value(QLatin1String("text")).toString() + QLatin1Char('\n'));
+                return;
+            }
+            if (msg.contains(QLatin1String("result"))) {
+                const QJsonObject r = msg.value(QLatin1String("result")).toObject();
+                m_winToken = r.value(QLatin1String("token")).toString();
+                m_winLanguages = r.value(QLatin1String("languages")).toArray().toVariantList();
+                m_winBusy = false;
+                Q_EMIT winLanguagesChanged();
+                Q_EMIT winBusyChanged();
+                return;
+            }
+            if (ev == QLatin1String("done") || msg.contains(QLatin1String("error"))) {
+                m_winBusy = false;
+                Q_EMIT winBusyChanged();
+                if (!msg.value(QLatin1String("cancelled")).toBool()) {
+                    m_winError = msg.value(QLatin1String("error"))
+                                     .toString(i18n("The languages could not be fetched."));
+                    Q_EMIT winErrorChanged();
+                }
+            }
+        });
+}
+
+void Backend::winLinks(int version, int release, const QVariantList &editionIds,
+                       const QVariantList &languageData)
+{
+    m_winBusy = true;
+    m_winError.clear();
+    Q_EMIT winBusyChanged();
+    Q_EMIT winErrorChanged();
+
+    userEngine()->request(
+        QJsonObject{{QLatin1String("cmd"), QLatin1String("win_links")},
+                    {QLatin1String("version"), version},
+                    {QLatin1String("release"), release},
+                    {QLatin1String("edition_ids"), QJsonArray::fromVariantList(editionIds)},
+                    {QLatin1String("token"), m_winToken},
+                    {QLatin1String("language_data"), QJsonArray::fromVariantList(languageData)}},
+        [this](const QJsonObject &msg) {
+            const QString ev = eventOf(msg);
+            if (ev == QLatin1String("log")) {
+                appendLog(msg.value(QLatin1String("text")).toString() + QLatin1Char('\n'));
+                return;
+            }
+            if (msg.contains(QLatin1String("result"))) {
+                m_winLinks = msg.value(QLatin1String("result")).toArray().toVariantList();
+                m_winBusy = false;
+                Q_EMIT winLinksChanged();
+                Q_EMIT winBusyChanged();
+                return;
+            }
+            if (ev == QLatin1String("done") || msg.contains(QLatin1String("error"))) {
+                m_winBusy = false;
+                Q_EMIT winBusyChanged();
+                if (!msg.value(QLatin1String("cancelled")).toBool()) {
+                    m_winError = msg.value(QLatin1String("error"))
+                                     .toString(i18n("The download links could not be fetched."));
+                    Q_EMIT winErrorChanged();
+                }
+            }
+        });
+}
+
+QUrl Backend::suggestedSaveUrl(const QString &downloadUrl) const
+{
+    QString path = downloadUrl;
+    const int q = path.indexOf(QLatin1Char('?'));
+    if (q >= 0) {
+        path = path.left(q);
+    }
+    QString name = path.section(QLatin1Char('/'), -1);
+    name = QUrl::fromPercentEncoding(name.toUtf8());
+    if (name.isEmpty()) {
+        name = QStringLiteral("windows.iso");
+    }
+    QString dir = QStandardPaths::writableLocation(QStandardPaths::DownloadLocation);
+    if (dir.isEmpty()) {
+        dir = QDir::homePath();
+    }
+    return QUrl::fromLocalFile(QDir(dir).filePath(name));
+}
+
+void Backend::download(const QString &url, const QString &dest)
+{
+    if (m_running) {
+        return;
+    }
+    m_running = true;
+    m_downloading = true;
+    m_error.clear();
+    m_succeeded = false;
+    m_overall = 0;
+    m_phaseProgress = -1;
+    m_phaseMessage.clear();
+    Q_EMIT runningChanged();
+    setStatus(i18n("Downloading…"));
+    appendLog(QStringLiteral("\n") + i18n("Downloading %1\n", url));
+
+    // The unprivileged engine: no drive is touched, so no pkexec prompt.
+    userEngine()->request(
+        QJsonObject{{QLatin1String("cmd"), QLatin1String("win_download")},
+                    {QLatin1String("url"), url},
+                    {QLatin1String("dest"), dest}},
+        [this](const QJsonObject &msg) {
+            const QString ev = eventOf(msg);
+            if (ev == QLatin1String("log")) {
+                appendLog(msg.value(QLatin1String("text")).toString() + QLatin1Char('\n'));
+            } else if (ev == QLatin1String("progress")) {
+                const QJsonValue v = msg.value(QLatin1String("value"));
+                m_phaseProgress = v.isDouble() ? v.toDouble() : -1;
+                // The main progress bar reads `overall`; a download has no
+                // separate overall event, so its one phase drives it directly.
+                m_overall = m_phaseProgress >= 0 ? m_phaseProgress : 0;
+                m_phaseMessage = msg.value(QLatin1String("message")).toString();
+                Q_EMIT progressChanged();
+            } else if (ev == QLatin1String("done")) {
+                m_running = false;
+                m_downloading = false;
+                m_phaseProgress = -1;
+                m_phaseMessage.clear();
+                if (msg.value(QLatin1String("ok")).toBool()) {
+                    m_overall = 1;
+                    m_succeeded = true;
+                    setStatus(i18n("READY"));
+                    appendLog(i18n("Done.\n"));
+                    const QString path = msg.value(QLatin1String("path")).toString();
+                    Q_EMIT runningChanged();
+                    Q_EMIT downloadFinished(path);
+                    return;
+                }
+                if (msg.value(QLatin1String("cancelled")).toBool()) {
+                    m_overall = 0;
+                    fail(i18n("Cancelled."));
+                } else {
+                    fail(msg.value(QLatin1String("error")).toString(i18n("The download failed.")));
+                }
+                Q_EMIT runningChanged();
+            } else if (msg.contains(QLatin1String("error"))) {
+                m_running = false;
+                m_downloading = false;
+                m_overall = 0;
+                fail(msg.value(QLatin1String("error")).toString());
+                Q_EMIT runningChanged();
+            }
+        });
+}
+
 void Backend::start(const QVariantMap &job)
 {
     if (m_running) {
@@ -599,7 +815,11 @@ void Backend::cancel()
     // the user. The engine answers with "cancelling" and then the job's own
     // `done`, so nothing needs to be tracked here.
     const QJsonObject req{{QLatin1String("cmd"), QLatin1String("cancel")}};
-    if (m_running && m_root) {
+    if (m_downloading && m_user) {
+        // A download always runs on the unprivileged engine, even if a write
+        // from earlier in the session left a root engine standing.
+        m_user->request(req, [](const QJsonObject &) {});
+    } else if (m_running && m_root) {
         m_root->request(req, [](const QJsonObject &) {});
     } else if ((m_running || m_hashing) && m_user) {
         m_user->request(req, [](const QJsonObject &) {});

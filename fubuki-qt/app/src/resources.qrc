@@ -4,5 +4,6 @@
     <file>qml/WindowsOptionsDialog.qml</file>
     <file>qml/ChecksumDialog.qml</file>
     <file>qml/ConfirmDialog.qml</file>
+    <file>qml/DownloadDialog.qml</file>
   </qresource>
 </RCC>
