@@ -1,14 +1,29 @@
 """The dialogs: the Windows options, the checksums, and the last warning
 before a drive is erased."""
 
+from urllib.parse import unquote, urlparse
+
 import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Adw, Gtk, Pango  # noqa: E402
+from gi.repository import Adw, GLib, Gtk, Pango  # noqa: E402
 
 from .engine import current_user, remember_windows_choices, saved_windows_choices  # noqa: E402
-from .i18n import _, fmt  # noqa: E402
+from .i18n import _, fmt, pgettext  # noqa: E402
+
+
+def iso_name_from_url(url):
+    """The file name to offer in the save dialog: the URL's last path segment,
+    unquoted, or a plain fallback. The engine names the file the same way, but
+    exposes no helper to the window, so it is derived here."""
+    try:
+        name = unquote(urlparse(url).path.rsplit("/", 1)[-1])
+        if name:
+            return name
+    except Exception:
+        pass
+    return "windows.iso"
 
 # Rufus's "Windows User Experience" dialog: what to patch into the installer
 # before it runs. The option names are the engine's; only the labels live
@@ -210,4 +225,300 @@ class ChecksumDialog(Adw.Dialog):
         # checksum nobody is waiting for is only disk traffic.
         if self._backend.hashing:
             self._backend.cancel()
+
+
+class DownloadDialog(Adw.Dialog):
+    """Rufus's "Download" button: pick a Windows or UEFI Shell ISO from
+    Microsoft (and GitHub) by version, release, edition, language and
+    architecture, then hand the chosen link and a save path to `on_download`.
+
+    Version, release and edition are answered from the engine's local tables
+    and cascade instantly. The language list and the download links are fetched
+    over the network, so those steps show a spinner and disable the form. A
+    generation counter discards a cascade the user has already moved past.
+
+    Laid out like the main window (and the KDE dialog): Rufus's form, a small
+    label over each full-width drop-down, the buttons at the bottom right."""
+
+    LOCALE = "en-US"
+
+    def __init__(self, backend, on_download):
+        super().__init__(title=_("Download ISO"), content_width=520)
+        # window.py imports this module at load time, so the form helpers are
+        # fetched here, once the window module is complete, rather than at
+        # the top of the file.
+        from .window import ChoiceDrop, field  # noqa: PLC0415
+        self._backend = backend
+        self._on_download = on_download
+        self._gen = 0
+        self._busy = False
+        self._versions = []
+        self._releases = []
+        self._editions = []
+        self._languages = []
+        self._token = None
+        self._links = []
+
+        view = Adw.ToolbarView()
+        view.add_top_bar(Adw.HeaderBar())
+
+        form = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4,
+                       margin_top=6, margin_bottom=12, margin_start=12, margin_end=12)
+        self._version_row = ChoiceDrop(self._on_version_changed)
+        self._release_row = ChoiceDrop(self._on_release_changed)
+        self._edition_row = ChoiceDrop(self._on_edition_changed)
+        self._language_row = ChoiceDrop(self._on_language_changed)
+        self._arch_row = ChoiceDrop(lambda _value: None)
+        for label, drop in ((_("Version"), self._version_row), (_("Release"), self._release_row),
+                            (_("Edition"), self._edition_row), (_("Language"), self._language_row),
+                            (_("Architecture"), self._arch_row)):
+            form.append(field(label, drop))
+
+        self._spinner = Gtk.Spinner()
+        self._status = Gtk.Label(xalign=0, wrap=True)
+        self._status.add_css_class("dim-label")
+        status_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8, margin_top=12)
+        status_row.append(self._spinner)
+        status_row.append(self._status)
+        form.append(status_row)
+
+        actions = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6, margin_top=12,
+                          halign=Gtk.Align.END)
+        cancel = Gtk.Button(label=_("Cancel"), width_request=100)
+        cancel.connect("clicked", lambda *_a: self.close())
+        actions.append(cancel)
+        self._download_button = Gtk.Button(label=pgettext("@action:button", "Download"), width_request=100)
+        self._download_button.add_css_class("suggested-action")
+        self._download_button.connect("clicked", self._on_download_clicked)
+        actions.append(self._download_button)
+        form.append(actions)
+        self.set_default_widget(self._download_button)
+
+        view.set_content(form)
+        self.set_child(view)
+        self._set_busy(False)
+        self._load_versions()
+
+    # ---- drop-down helpers ----------------------------------------------
+
+    def _fill(self, drop, texts, selected=0):
+        # The choices are the list indexes: what every engine call takes.
+        drop.set_choices([(text, i) for i, text in enumerate(texts)], selected)
+
+    def _selected(self, drop):
+        value = drop.get_value()
+        return value if value is not None else -1
+
+    # ---- busy state -----------------------------------------------------
+
+    def _set_busy(self, on, text=""):
+        self._busy = on
+        if on:
+            self._spinner.start()
+        else:
+            self._spinner.stop()
+        self._spinner.set_visible(on)
+        self._status.set_text(text)
+        for row in (self._version_row, self._release_row, self._edition_row,
+                    self._language_row, self._arch_row):
+            row.set_sensitive(not on)
+        self._refresh_download_button()
+
+    def _refresh_download_button(self):
+        # Download needs a fetched language list (its token and data feed the
+        # links call); nothing to download before then.
+        self._download_button.set_sensitive(
+            not self._busy and bool(self._languages) and self._token is not None)
+
+    def _request(self, req, handler):
+        # A dedicated engine, not the drive-polling one: see Backend.query_engine.
+        self._backend.query_engine().request(req, handler)
+
+    def _log(self, msg):
+        text = msg.get("text")
+        if text:
+            self._backend.note(str(text))
+
+    # ---- the cascade ----------------------------------------------------
+
+    def _load_versions(self):
+        def on_reply(msg):
+            if "result" not in msg:
+                if "error" in msg:
+                    self._set_busy(False, str(msg["error"]))
+                return
+            self._versions = list(msg["result"] or [])
+            self._fill(self._version_row, [str(v.get("name", "")) for v in self._versions])
+            if self._versions:
+                self._load_releases()
+        self._request({"cmd": "win_versions"}, on_reply)
+
+    def _load_releases(self):
+        version = self._selected(self._version_row)
+        if version < 0:
+            return
+        self._gen += 1
+        gen = self._gen
+        self._reset_below("release")
+
+        def on_reply(msg):
+            if gen != self._gen or "result" not in msg:
+                return
+            self._releases = list(msg["result"] or [])
+            self._fill(self._release_row, [str(r.get("label", "")) for r in self._releases])
+            self._load_editions(gen)
+        self._request({"cmd": "win_releases", "version": version}, on_reply)
+
+    def _load_editions(self, gen=None):
+        if gen is None:
+            self._gen += 1
+            gen = self._gen
+        version = self._selected(self._version_row)
+        release = self._selected(self._release_row)
+        if version < 0 or release < 0:
+            return
+        self._reset_below("edition")
+
+        def on_reply(msg):
+            if gen != self._gen or "result" not in msg:
+                return
+            self._editions = list(msg["result"] or [])
+            self._fill(self._edition_row, [str(e.get("name", "")) for e in self._editions])
+            self._load_languages(gen)
+        self._request({"cmd": "win_editions", "version": version, "release": release,
+                       "locale": self.LOCALE}, on_reply)
+
+    def _load_languages(self, gen=None):
+        if gen is None:
+            self._gen += 1
+            gen = self._gen
+        version = self._selected(self._version_row)
+        edition = self._selected(self._edition_row)
+        if version < 0 or edition < 0:
+            return
+        self._reset_below("language")
+        edition_ids = list(self._editions[edition].get("ids") or [])
+        self._set_busy(True, _("Fetching languages from Microsoft…"))
+
+        def on_reply(msg):
+            if gen != self._gen:
+                return
+            event = msg.get("event")
+            if event == "log":
+                self._log(msg)
+                return
+            if "result" in msg:
+                result = msg["result"] or {}
+                self._token = result.get("token")
+                self._languages = list(result.get("languages") or [])
+                self._fill(self._language_row,
+                           [str(la.get("display") or la.get("name") or "") for la in self._languages])
+                self._set_busy(False, "" if self._languages else _("No languages were returned."))
+                return
+            if event == "done" or "error" in msg:
+                self._languages = []
+                self._token = None
+                self._set_busy(False, fmt(_("Could not fetch languages: %1"),
+                                          msg.get("error") or _("network error")))
+        self._request({"cmd": "win_languages", "version": version,
+                       "edition_ids": edition_ids, "locale": self.LOCALE}, on_reply)
+
+    def _reset_below(self, level):
+        # Clear every choice downstream of the one that changed, so a stale
+        # language or link is never carried into a new selection.
+        order = ["version", "release", "edition", "language", "link"]
+        below = order[order.index(level) + 1:]
+        if "language" in below:
+            self._languages = []
+            self._token = None
+            self._fill(self._language_row, [])
+        if "link" in below:
+            self._links = []
+            self._fill(self._arch_row, [])
+        self._refresh_download_button()
+
+    # ---- user changes ---------------------------------------------------
+
+    def _on_version_changed(self, _value):
+        self._load_releases()
+
+    def _on_release_changed(self, _value):
+        self._load_editions()
+
+    def _on_edition_changed(self, _value):
+        self._load_languages()
+
+    def _on_language_changed(self, _value):
+        # A new language means the previous links no longer apply, but the
+        # language list itself stays.
+        self._gen += 1
+        self._reset_below("language")
+
+    # ---- links and download --------------------------------------------
+
+    def _on_download_clicked(self, *_args):
+        if self._busy or not self._languages or self._token is None:
+            return
+        if not self._links:
+            self._load_links()
+            return
+        arch = self._selected(self._arch_row)
+        if 0 <= arch < len(self._links):
+            self._choose_dest(str(self._links[arch].get("url") or ""))
+
+    def _load_links(self):
+        self._gen += 1
+        gen = self._gen
+        version = self._selected(self._version_row)
+        release = self._selected(self._release_row)
+        edition = self._selected(self._edition_row)
+        language = self._selected(self._language_row)
+        if min(version, release, edition, language) < 0:
+            return
+        edition_ids = list(self._editions[edition].get("ids") or [])
+        language_data = list(self._languages[language].get("data") or [])
+        self._set_busy(True, _("Fetching download links…"))
+
+        def on_reply(msg):
+            if gen != self._gen:
+                return
+            event = msg.get("event")
+            if event == "log":
+                self._log(msg)
+                return
+            if "result" in msg:
+                self._links = list(msg["result"] or [])
+                self._fill(self._arch_row, [str(li.get("arch") or "") for li in self._links])
+                self._set_busy(False, "" if self._links else _("No download links were returned."))
+                # One architecture is the common case (and UEFI Shell always):
+                # go straight to the save dialog rather than make the user pick.
+                if len(self._links) == 1:
+                    self._choose_dest(str(self._links[0].get("url") or ""))
+                return
+            if event == "done" or "error" in msg:
+                self._links = []
+                self._set_busy(False, fmt(_("Could not fetch links: %1"),
+                                          msg.get("error") or _("network error")))
+        self._request({"cmd": "win_links", "version": version, "release": release,
+                       "edition_ids": edition_ids, "token": self._token,
+                       "language_data": language_data}, on_reply)
+
+    def _choose_dest(self, url):
+        if not url:
+            return
+        dialog = Gtk.FileDialog(title=_("Save ISO"))
+        dialog.set_initial_name(iso_name_from_url(url))
+        dialog.save(self.get_root(), None, lambda d, r: self._on_dest_chosen(d, r, url))
+
+    def _on_dest_chosen(self, dialog, result, url):
+        try:
+            f = dialog.save_finish(result)
+        except GLib.Error:
+            # Dismissed: leave the download dialog open for another try.
+            return
+        if f is None or not f.get_path():
+            return
+        dest = f.get_path()
+        self.close()
+        self._on_download(url, dest)
 

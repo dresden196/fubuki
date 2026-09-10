@@ -335,6 +335,7 @@ class Backend(GObject.Object):
         super().__init__()
         self._user = None
         self._root = None
+        self._query = None
         self.devices = []
         self.list_usb_hdd = False
         self._devices_pending = False
@@ -342,6 +343,10 @@ class Backend(GObject.Object):
         self.image = {}
         self.probing = False
         self.running = False
+        # A download runs through the unprivileged engine and drives the same
+        # progress plumbing as a write, so `running` is shared; this tells the
+        # two apart for cancelling.
+        self.download_active = False
         self.hashing = False
         self.hashes = {}
         self.hash_progress = 0.0
@@ -393,6 +398,8 @@ class Backend(GObject.Object):
         # rather than talking to a corpse.
         if privileged and self._root is engine:
             self._root = None
+        elif self._query is engine:
+            self._query = None
         elif not privileged and self._user is engine:
             self._user = None
 
@@ -400,6 +407,19 @@ class Backend(GObject.Object):
         if self._user is None:
             self._user = self._make_engine(False)
         return self._user
+
+    def query_engine(self):
+        # A second, unprivileged engine kept apart from `user_engine` for the
+        # download dialog's version/release/edition/language/link lookups. The
+        # window polls the first engine for drives every couple of seconds; a
+        # languages or links fetch takes long enough on the network that one of
+        # those polls would otherwise arrive in the middle of it, and the
+        # engine tags a threaded reply with the id of the request it saw last,
+        # not the one that asked. On an engine nothing else talks to, the id
+        # stays the fetch's own and the reply comes back to the right handler.
+        if self._query is None:
+            self._query = self._make_engine(False)
+        return self._query
 
     def root_engine(self):
         # Already root: one process can do everything, and a second one would
@@ -424,6 +444,8 @@ class Backend(GObject.Object):
             self._root.shutdown()
         if self._user is not None:
             self._user.shutdown()
+        if self._query is not None:
+            self._query.shutdown()
 
     # ---- devices -------------------------------------------------------
 
@@ -635,12 +657,81 @@ class Backend(GObject.Object):
 
         self.root_engine().request({"cmd": "write", "job": job}, on_message)
 
+    def download(self, url, dest, on_done=None):
+        """Fetch an ISO through the unprivileged engine. The progress is shown
+        in the main window the same way a write's is (`running` shared), so
+        START becomes CANCEL and the bar follows the `download` phase. On
+        success `on_done` is handed the finished file's path."""
+        if self.running:
+            return
+        self.running = True
+        self.download_active = True
+        self.error = ""
+        self.succeeded = False
+        self.overall = 0.0
+        self.phase_progress = -1.0
+        self.phase_message = ""
+        self.emit("running-changed")
+        self._set_status(_("Downloading…"))
+        self._append_log("\n" + fmt(_("Downloading %1\n"), url))
+
+        def finished():
+            self.running = False
+            self.download_active = False
+            self.emit("running-changed")
+            if self._devices_stale:
+                self.refresh_devices()
+
+        def on_message(msg):
+            event = msg.get("event")
+            if event == "log":
+                self._append_log(str(msg.get("text", "")) + "\n")
+            elif event == "progress":
+                value = msg.get("value")
+                if isinstance(value, (int, float)):
+                    self.phase_progress = float(value)
+                    # No separate `overall` event for a download; the phase
+                    # value drives the bar directly.
+                    self.overall = float(value)
+                else:
+                    self.phase_progress = -1.0
+                    self.overall = 0.0
+                self.phase_message = str(msg.get("message") or "")
+                self.emit("progress-changed")
+            elif event == "done":
+                self.phase_progress = -1.0
+                self.phase_message = ""
+                if msg.get("ok"):
+                    self.overall = 1.0
+                    self.succeeded = True
+                    self._set_status(_("READY"))
+                    self._append_log(fmt(_("Downloaded to %1\n"), msg.get("path", "")))
+                    path = msg.get("path")
+                    finished()
+                    if on_done and path:
+                        on_done(str(path))
+                    return
+                if msg.get("cancelled"):
+                    self.overall = 0.0
+                    self._fail(_("Cancelled."))
+                else:
+                    self._fail(str(msg.get("error") or _("The download failed.")))
+                finished()
+            elif "error" in msg:
+                self.overall = 0.0
+                self._fail(str(msg["error"]))
+                finished()
+
+        self.user_engine().request({"cmd": "win_download", "url": url, "dest": dest}, on_message)
+
     def cancel(self):
-        # Whichever engine holds the job: a write runs as root, a checksum as
-        # the user. The engine answers with "cancelling" and then the job's
-        # own `done`, so nothing needs to be tracked here.
+        # Whichever engine holds the job: a write runs as root, a checksum or
+        # a download as the user. The engine answers with "cancelling" and then
+        # the job's own `done`, so nothing needs to be tracked here.
         req = {"cmd": "cancel"}
-        if self.running and self._root is not None:
+        if self.running and self.download_active and self._user is not None:
+            self._user.request(req, lambda msg: None)
+        elif self.running and self._root is not None:
             self._root.request(req, lambda msg: None)
         elif (self.running or self.hashing) and self._user is not None:
             self._user.request(req, lambda msg: None)

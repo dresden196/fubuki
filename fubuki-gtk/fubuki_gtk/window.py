@@ -366,7 +366,21 @@ class FubukiWindow(Adw.ApplicationWindow):
         self.hash_button.add_css_class("flat")
         self.hash_button.connect("clicked", self._on_hash_clicked)
         row.append(self.hash_button)
-        self.select_button = Gtk.Button(label=pgettext("@action:button", "SELECT"), valign=Gtk.Align.CENTER)
+        # Rufus's SELECT button carries a dropdown arrow offering Download; the
+        # main button keeps its old job of opening the file chooser.
+        boot_actions = Gio.SimpleActionGroup()
+        select_action = Gio.SimpleAction.new("select", None)
+        select_action.connect("activate", lambda *_a: self._on_select_clicked())
+        boot_actions.add_action(select_action)
+        download_action = Gio.SimpleAction.new("download", None)
+        download_action.connect("activate", lambda *_a: self._on_download_clicked())
+        boot_actions.add_action(download_action)
+        self.insert_action_group("boot", boot_actions)
+        boot_menu = Gio.Menu()
+        boot_menu.append(pgettext("@action:button", "Select"), "boot.select")
+        boot_menu.append(pgettext("@action:button opens the Download ISO dialog", "Download"), "boot.download")
+        self.select_button = Adw.SplitButton(label=pgettext("@action:button", "SELECT"),
+                                             valign=Gtk.Align.CENTER, menu_model=boot_menu)
         self.select_button.connect("clicked", self._on_select_clicked)
         row.append(self.select_button)
         form.append(row)
@@ -782,6 +796,19 @@ class FubukiWindow(Adw.ApplicationWindow):
             return
         if f is not None and f.get_path():
             self.select_image(f.get_path())
+
+    def _on_download_clicked(self, *_args):
+        if self.busy:
+            return
+        dialogs.DownloadDialog(self.backend, self._start_download).present(self)
+
+    def _start_download(self, url, dest):
+        # The download runs through the same (unprivileged) engine as a probe,
+        # and shows its progress in the main window like a write. When it
+        # finishes the file becomes the boot selection, exactly as if it had
+        # been picked from disk.
+        self.backend.clear_error()
+        self.backend.download(url, dest, self.select_image)
 
     def _on_hash_clicked(self, *_args):
         if not self.has_image:
