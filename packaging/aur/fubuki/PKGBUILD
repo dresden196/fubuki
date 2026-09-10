@@ -14,7 +14,7 @@ optdepends=('zstd: writing .zst compressed images'
             'fubuki-ui: the KDE window'
             'fubuki-gtk: the GNOME window')
 source=("$pkgname-$pkgver.tar.gz::https://github.com/dresden196/fubuki/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('a64af150cbf60a49d5e62bfff0cbbd76b80c6d2f6f99fa383c2c9bfee11398b5')
+sha256sums=('c87b588d9101888a28a66aa9ce8cf3f28ac080b1bb37d8e0da86b5ae828192b9')
 
 package() {
     cd "$srcdir/fubuki-$pkgver/fubuki"
