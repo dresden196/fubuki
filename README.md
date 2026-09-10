@@ -1,43 +1,82 @@
 # Fubuki
 
-Japanese: 桜吹雪, *sakura fubuki*: a blizzard of cherry petals. Fubuki is a bootable-USB
-writer for Linux, doing what Rufus does on Windows: Windows install media on
-NTFS with UEFI:NTFS, the Windows 11 hardware-check bypass and answer files,
-Windows To Go, Linux ISOs with persistence, FreeDOS, and plain DD writes with
-verification. It is a KDE application (Qt 6, Kirigami) with a command line
-engine that works on its own.
+**A bootable USB writer for Linux, in the spirit of Rufus.**
 
-- `fubuki/` — the engine (Python) and its package. See its README and `PROTOCOL.md`.
-- `fubuki-ui/` — the window.
-- `tests/usb/` — the QEMU bench: `native.sh` writes a loop-backed image and
-  boots it under BIOS and UEFI; `vm.sh` does the same inside a live guest with
-  an emulated USB stick.
+Japanese 桜吹雪, *sakura fubuki*: a blizzard of cherry petals.
 
-Verified this way, by screenshot: Ubuntu ISO mode with persistence (BIOS and
-UEFI), Ubuntu DD with verify, Windows 11 on NTFS via UEFI:NTFS, on exFAT, and on FAT32
-with a split install.wim (BIOS and UEFI), a silent Windows 11 install carried
-through to the desktop on a machine with no TPM, Windows To Go on MBR (BIOS
-and UEFI) and on GPT with an ESP (UEFI), an archiso-based live ISO through
-Syslinux (BIOS and UEFI, on FAT32 and on ext4), FreeDOS (FAT32, and FAT16 on a
-1 GB drive), the destructive bad-blocks scan, KolibriOS (to its desktop), a Grub4DOS
-stick (to the grub> prompt), Windows XP SP3 setup media (text-mode Setup
-loads, through the masquerading MBR and a patched setupldr; XP itself needs
-a machine with USB 2.0 and pre-q35 ACPI, so the bench uses `pc` + EHCI); the
-same stick's contents copied from a physical 32 GB drive boot the same way. ReactOS 0.4.15's BootCD boots FreeLoader and the
-kernel through Syslinux's mboot chain, the same way Rufus does, and then stops
-with 0x7B: that image cannot mount a disk partition as its boot device, on USB
-or SATA alike. On a physical 64 GB stick handed to QEMU
-over USB passthrough (`tests/usb/boot-real.sh`): Windows 11 on NTFS boots
-under UEFI and under enforcing Secure Boot with Microsoft's certificates
-enrolled; an archiso live image written in ISO mode boots under BIOS
-(Syslinux) and UEFI. `tests/usb/test-cancel.sh` covers cancel
-mid-write, running out of temporary space, and refused devices.
+Fubuki makes a USB stick that boots, from Windows and Linux installers, live
+systems, DOS, and raw disk images. It does the things Rufus does that a plain
+`dd` cannot, and it does them with the tools a Linux system already has.
 
-Both are packaged for Arch Linux (`makepkg` in each directory). Fubuki ships
-with SakuraOS but does not depend on it. The window and the engine's status
-and error messages are translated into German, French, Spanish, Italian,
-Brazilian Portuguese, Dutch, Polish, Russian, Ukrainian, Japanese, Simplified
-Chinese and Korean (`fubuki-ui/po`, `fubuki/po`); the log stays English.
+- **Windows install media** on NTFS or exFAT, booting on UEFI through
+  UEFI:NTFS, or on FAT32 with `install.wim` split for you.
+- **Windows 11 without the checks**: TPM, Secure Boot and RAM requirements
+  removed inside `boot.wim`, the 24H2 in-place-upgrade wrapper, and answer
+  files for a local account, no Microsoft account, no telemetry, no BitLocker.
+  Optionally a fully unattended install.
+- **Windows To Go** on MBR or GPT, and **Windows XP** setup media.
+- **Linux ISOs** copied as files with the fixes they need on a stick, GRUB or
+  Syslinux installed for BIOS boot, a persistent partition for Ubuntu and
+  Debian live media. Or DD mode for hybrid images, with read-back verification.
+- **FreeDOS**, KolibriOS, Grub4DOS, and plain UEFI:NTFS drives.
+- Compressed images (gzip, xz, bzip2, zstd), fixed VHD, checksums, a
+  destructive bad-blocks scan.
+- A KDE window (`fubuki-ui`) and a GNOME window (`fubuki-gtk`) over one
+  engine with a command line (`fubuki`). Twelve languages.
+
+## Install
+
+Arch Linux and derivatives, from the AUR:
+
+    yay -S fubuki fubuki-ui      # KDE
+    yay -S fubuki fubuki-gtk     # GNOME
+
+Or from this tree: `makepkg -si` in `fubuki/`, then in `fubuki-ui/` or
+`fubuki-gtk/`. `./release.sh` builds all packages into `dist/`.
+
+Fubuki ships with [SakuraOS](https://sakuraos.org).
+
+## Use
+
+Pick a drive, pick an image, press START. The defaults come from what the
+image is: a Windows ISO gets GPT, UEFI and NTFS; a hybrid Linux ISO gets ISO
+mode with "BIOS or UEFI". Writing needs administrator rights, asked once per
+session through polkit.
+
+The engine works on its own:
+
+    fubuki devices
+    fubuki probe some.iso
+    sudo fubuki write -d /dev/sdb -i some.iso
+    sudo fubuki write -d /dev/sdb -i win11.iso --scheme gpt --target uefi --fs ntfs \
+         --windows-option bypass_requirements --windows-option no_online_account
+    sudo fubuki write -d /dev/sdb -i ubuntu.iso --persistence 4G
+    sudo fubuki write -d /dev/sdb -i win11.iso --wintogo 1 --scheme gpt --target uefi --fs ntfs
+    sudo fubuki write -d /dev/sdb -i image.img.xz --mode dd --verify
+    sudo fubuki write -d /dev/sdb --boot-type freedos
+
+`fubuki write --help` lists everything; `fubuki/PROTOCOL.md` documents the
+JSON protocol the windows use.
+
+## How it works
+
+The engine reads ISO 9660 and UDF itself, so probing an image needs neither
+root nor a mount, and it can read the version index of a 4 GB `install.wim`
+without extracting it. Partitions go through `sfdisk`, file systems through
+`mkfs.*`, boot sectors are the Microsoft, FreeDOS and Syslinux records that
+ms-sys and Rufus write, BIOS boot loaders come from the host's `grub-install`
+and `extlinux`, WIM images through `wimlib`, and the Windows registry and BCD
+stores through `hivex`. See `fubuki/README.md` for the module map.
+
+## Testing
+
+Every boot path is verified by booting the written drive in QEMU, under BIOS
+and UEFI, including physical sticks over USB passthrough and enforcing Secure
+Boot. See [docs/TESTING.md](docs/TESTING.md) for the bench and the matrix.
+
+## Credits and license
 
 Design and boot payloads derive from [Rufus](https://github.com/pbatard/rufus)
-by Pete Batard, GPLv3. This project is GPL-3.0-or-later.
+by Pete Batard: `uefi-ntfs.img`, FreeDOS, the Windows 11 setup wrapper, and
+the boot-sector code ported from ms-sys (Henrik Carlqvist). Grub4DOS by
+chenall. Fubuki is GPL-3.0-or-later.

@@ -1,0 +1,54 @@
+# Testing
+
+Every claim of "boots" below is backed by a screenshot taken from the booted
+machine, produced by the scripts in `tests/usb/`.
+
+## Bench
+
+- `tests/usb/native.sh <scenario> [iso]` writes a sparse disk image through a
+  loop device on the host and boots it in QEMU under BIOS and UEFI. The quick
+  check; needs root and a kernel that can mount the target file systems.
+- `tests/usb/vm.sh` boots an Arch-based live ISO (`FUBUKI_LIVE_ISO`) with an
+  emulated USB stick and shares this tree into it; `guest-setup.sh` installs
+  the engine's dependencies; `run.sh <scenario>` drives the engine inside the
+  guest and boots the result on the host (`boot-stick.sh`).
+- `tests/usb/boot-real.sh <vendor:product> uefi|bios|secboot` hands a physical
+  stick to QEMU over USB passthrough. `secboot` uses OVMF's Secure Boot build
+  with Microsoft's certificates enrolled (`virt-fw-vars --enroll-redhat`).
+- `tests/usb/install-vm.sh` lets a written Windows stick install itself onto
+  an empty disk with no TPM attached; `test-cancel.sh` covers cancel
+  mid-write, running out of temporary space, and refused devices.
+
+Knobs: `FUBUKI_MACHINE=pc` (pre-q35 chipset), `FUBUKI_USB_CTRL=ehci` (USB 2.0
+controller), `FUBUKI_EXTRA_DISK=1` (an empty SATA disk), `FUBUKI_BOOT_MEM`,
+`FUBUKI_STICK_PERSIST=1` (keep the guest's writes, to read its logs after).
+
+## Verified
+
+| Media | Layout | BIOS | UEFI |
+|---|---|---|---|
+| Ubuntu 24.04 Server, ISO mode, 2 GB persistence | MBR, FAT32 | installer | installer |
+| Ubuntu 24.04 Server, DD mode with read-back verify | as image | | installer |
+| Windows 11 24H2, NTFS via UEFI:NTFS | GPT | | Setup |
+| Windows 11 24H2, exFAT via UEFI:NTFS | GPT | | Setup |
+| Windows 11 24H2, FAT32 with split install.swm | MBR | Setup | Setup |
+| Windows 11 24H2, silent install, no TPM | GPT | | to the desktop |
+| Windows To Go, NTFS | MBR | OOBE | OOBE |
+| Windows To Go, NTFS + ESP + MSR | GPT | | OOBE |
+| Windows XP SP3 setup media (masquerading MBR, patched setupldr) | MBR, FAT32 | text-mode Setup | |
+| Fedora Workstation 44 (config in /boot/grub2) | MBR, FAT32 | GRUB → kernel | Plymouth |
+| SakuraOS live (archiso, Syslinux 6.04) | MBR, FAT32 and ext4 | welcome | welcome |
+| FreeDOS 1.4 | MBR, FAT32; FAT16 on a 1 GB drive | `C:\>` | |
+| KolibriOS | MBR, FAT32 | desktop | |
+| Grub4DOS boot type | MBR, FAT32 | `grub>` | |
+| ReactOS 0.4.15 BootCD | MBR, FAT32 | FreeLoader and kernel load, then STOP 0x7B: the image cannot mount a disk partition as its boot device, on USB or SATA alike | |
+
+On physical sticks handed to QEMU over USB passthrough: Windows 11 on NTFS
+boots under UEFI and under enforcing Secure Boot; an archiso live image in ISO
+mode boots under BIOS and UEFI; an R1Soft recovery CD written through the
+window boots under both; the XP stick's contents boot on a `pc` machine with
+an EHCI controller (XP has no xHCI driver and rejects q35's ACPI).
+
+Also exercised: the destructive bad-blocks scan, cancel mid-copy, refusal of
+the system disk and of unknown devices, and a 64 MB temporary directory
+forcing the install.wim split to fail cleanly.
