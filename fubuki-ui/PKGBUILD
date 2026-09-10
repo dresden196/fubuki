@@ -26,9 +26,8 @@ build() {
 }
 
 package() {
-    # hicolor carries the app mark so the entry has an icon under any theme.
-    install -Dm644 "$startdir/icons/fubuki.svg" \
-        "$pkgdir/usr/share/icons/hicolor/scalable/apps/fubuki.svg"
+    # The icon (hicolor/scalable/apps/fubuki.svg) comes with the engine
+    # package, which both front-ends depend on.
     DESTDIR="$pkgdir" cmake --install "$srcdir/build"
     install -Dm644 "$startdir/io.github.dresden196.fubuki.desktop" \
         "$pkgdir/usr/share/applications/io.github.dresden196.fubuki.desktop"

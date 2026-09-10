@@ -7,5 +7,7 @@ build/
 /fubuki/pkg/
 /fubuki-ui/src/
 /fubuki-ui/pkg/
+/fubuki-gtk/src/
+/fubuki-gtk/pkg/
 *.pkg.tar.zst
 dist/

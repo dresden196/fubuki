@@ -38,6 +38,11 @@ package() {
     find "$pkgdir/usr/share/fubuki" -type f -exec chmod 644 {} +
     install -Dm644 "$srcdir/io.github.dresden196.fubuki.policy" \
         "$pkgdir/usr/share/polkit-1/actions/io.github.dresden196.fubuki.policy"
+    # The app mark lives here rather than with either window: both front-ends
+    # (fubuki-ui, fubuki-gtk) depend on this package, and two packages owning
+    # the same hicolor path would conflict.
+    install -Dm644 "$startdir/icons/fubuki.svg" \
+        "$pkgdir/usr/share/icons/hicolor/scalable/apps/fubuki.svg"
     install -Dm644 "$startdir/PROTOCOL.md" "$pkgdir/usr/share/doc/fubuki/PROTOCOL.md"
 
     # Status phrases and error messages (fubuki/i18n.py); the log stays English.
