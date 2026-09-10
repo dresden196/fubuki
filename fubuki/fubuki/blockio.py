@@ -73,7 +73,8 @@ class BlockTarget:
         return done
 
     def fsync(self):
-        os.fsync(self.fd)
+        if self.fd is not None:
+            os.fsync(self.fd)
 
     def close(self):
         if self.fd is not None:

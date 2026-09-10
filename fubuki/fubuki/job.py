@@ -426,7 +426,7 @@ def run_job(job, emitter, cancel=None):
             for p in parts:
                 if p.target:
                     p.target.close()
-            backend.rescan(disk, (), log)
+            backend.rescan(disk, (), log, reopen=False)
             log("Done.")
             return {"ok": True, "label": usb_label}
         finally:

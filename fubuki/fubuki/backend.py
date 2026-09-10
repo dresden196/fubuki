@@ -124,9 +124,10 @@ class Backend:
     def inhibit(self, dev):
         yield
 
-    def rescan(self, disk, expected_numbers=(), log=None):
+    def rescan(self, disk, expected_numbers=(), log=None, reopen=True):
         """Make the kernel (and the desktop) read the new partition table
-        and wait until every expected partition exists."""
+        and wait until every expected partition exists. With reopen=False
+        the disk may be left closed (the job is done with it)."""
         raise NotImplementedError
 
     def settle(self):
@@ -262,7 +263,7 @@ class NativeBackend(Backend):
                 pass
             self._reload_udev(dev)
 
-    def rescan(self, disk, expected_numbers=(), log=None):
+    def rescan(self, disk, expected_numbers=(), log=None, reopen=True):
         disk.fsync()
         for _try in range(20):
             try:
@@ -383,14 +384,19 @@ class UdisksBackend(Backend):
                                            | self.Gio.DBusProxyFlags.DO_NOT_CONNECT_SIGNALS,
                                            None, UDISKS, path, iface, None)
 
+    #: udisks answers slowly while the kernel is still flushing a stick after
+    #: a big copy; the default 25 s D-Bus timeout is not enough then.
+    CALL_TIMEOUT_MS = 300000
+
     def _call(self, path, iface, method, sig, args, fds=False):
         proxy = self._proxy(path, iface)
         params = self.GLib.Variant(sig, args) if sig else None
         try:
             if fds:
-                res, fdlist = proxy.call_with_unix_fd_list_sync(method, params, self.Gio.DBusCallFlags.NONE, -1, None, None)
+                res, fdlist = proxy.call_with_unix_fd_list_sync(method, params, self.Gio.DBusCallFlags.NONE,
+                                                                 self.CALL_TIMEOUT_MS, None, None)
                 return res.unpack(), fdlist
-            return proxy.call_sync(method, params, self.Gio.DBusCallFlags.NONE, -1, None).unpack()
+            return proxy.call_sync(method, params, self.Gio.DBusCallFlags.NONE, self.CALL_TIMEOUT_MS, None).unpack()
         except self.GLib.Error as e:
             msg = e.message
             if "NotAuthorized" in msg or "Not authorized" in msg or "dismissed" in msg.lower():
@@ -576,9 +582,10 @@ class UdisksBackend(Backend):
             if b and _cstr(b["Device"]).startswith(dev) and (ifaces.get(UD_BLOCK) or {}).get("IdType") == "swap":
                 raise UsbError(_("%s is active swap; deactivate it first") % _cstr(b["Device"]))
 
-    def rescan(self, disk, expected_numbers=(), log=None):
+    def rescan(self, disk, expected_numbers=(), log=None, reopen=True):
         # Closing the last writer makes udev re-read the table (its inotify
         # watch on the node); Rescan asks udisks to refresh on top of that.
+        # The disk is reopened afterwards unless this is the last step.
         disk.fsync()
         disk.close()
         path = self._path_for(disk.path)
@@ -587,7 +594,8 @@ class UdisksBackend(Backend):
             node = partition_node(disk.path, n)
             if not self._path_for(node, timeout=15):
                 raise UsbError(_("%s did not appear after partitioning") % node)
-        disk.fd = self._open(disk.path, "rw")
+        if reopen:
+            disk.fd = self._open(disk.path, "rw")
 
     def refresh(self, target):
         """After writing a file system through the descriptor: have udisks
