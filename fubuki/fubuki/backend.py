@@ -446,12 +446,15 @@ class UdisksBackend(Backend):
             size = int(b.get("Size") or 0)
             if size == 0:
                 continue
-            if b.get("HintIgnore"):
-                continue
             drive = objs.get(b.get("Drive") or "", {}).get(UD_DRIVE, {}) if b.get("Drive") not in (None, "/") else {}
             removable = bool(drive.get("Removable") or drive.get("MediaRemovable"))
             bus = drive.get("ConnectionBus", "") or ""
             is_usb = bus == "usb"
+            # UDISKS_IGNORE hides a device from file managers; a udev rule that
+            # turns off automount for USB sticks sets it too, and udisks still
+            # opens and mounts those on request. Honour it only for fixed disks.
+            if b.get("HintIgnore") and not (removable or is_usb):
+                continue
             is_mmc = name.startswith("mmcblk") or bus == "sdio"
             system = bool(b.get("HintSystem")) and not removable and not is_loop
             parts = []
@@ -515,11 +518,23 @@ class UdisksBackend(Backend):
         return disks
 
     def is_system_disk(self, dev):
-        d = self.find_disk(dev)
-        if d is not None:
+        objs = self.objects()
+        path, ifaces = self._block(dev, objs)
+        if not path:
             return False
-        path, ifaces = self._block(dev)
-        return bool(path)   # known to udisks but filtered out above: system or ignored
+        b = ifaces.get(UD_BLOCK, {})
+        drive = objs.get(b.get("Drive") or "", {}).get(UD_DRIVE, {}) if b.get("Drive") not in (None, "/") else {}
+        if b.get("HintSystem") and not (drive.get("Removable") or drive.get("MediaRemovable")):
+            return True
+        for ppath, pif in objs.items():
+            pp = pif.get(UD_PART)
+            fs = pif.get(UD_FS)
+            if pp and fs and pp.get("Table") == path:
+                for m in fs.get("MountPoints") or []:
+                    m = _cstr(m)
+                    if m in ("/", "/boot", "/boot/efi", "/efi", "/home", "/usr", "/var") or m.startswith(("/usr/", "/var/lib")):
+                        return True
+        return False
 
     # --- access
     def open_disk(self, dev):
