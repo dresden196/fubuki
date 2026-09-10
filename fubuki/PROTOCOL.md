@@ -30,7 +30,13 @@ Every request carries an `id` (any JSON value; echoed back) and a `cmd`.
 | `probe`    | `path`                                   | streams `log` events, then `{"id","result":report}` or `{"id","event":"done","ok":false,"error":...}` |
 | `hash`     | `path`, `algorithms` ([md5,sha1,sha256,sha512]) | `progress` events (phase `hash`), then `{"id","result":{"md5":...}}` |
 | `write`    | `job` (object, see below)                | streams events; ends with `{"id","event":"done","ok":true,"label":...}` or `{"id","event":"done","ok":false,"error":"...","cancelled":true?}` |
-| `cancel`   |                                          | cancels the running write/hash |
+| `cancel`   |                                          | cancels the running write/hash/download |
+| `win_versions` |                                      | `{"id","result":[{"index","name","kind"}]}` (Windows/UEFI Shell ISO list) |
+| `win_releases` | `version` (index)                    | `{"id","result":[{"index","label"}]}` |
+| `win_editions` | `version`, `release`, `locale`       | `{"id","result":[{"index","name","ids"}]}` |
+| `win_languages` | `version`, `edition_ids`, `locale`  | streams `log`; then `{"id","result":{"token","languages":[{"name","display","data"}]}}` (talks to Microsoft) |
+| `win_links` | `version`, `release`, `edition_ids`, `token`, `language_data` | streams `log`; then `{"id","result":[{"arch","url"}]}` |
+| `win_download` | `url`, `dest`                       | `progress` events (phase `download`), then `{"id","event":"done","ok":true,"path","size"}` |
 | `quit`     |                                          | `{"id","result":"bye"}` and exit |
 
 Only one `write` or `hash` runs at a time. A second one is answered with

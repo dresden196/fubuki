@@ -97,6 +97,16 @@ Every boot path is verified by booting the written drive in QEMU, under BIOS
 and UEFI, including physical sticks over USB passthrough and enforcing Secure
 Boot. See [docs/TESTING.md](docs/TESTING.md) for the bench and the matrix.
 
+## Downloading Windows ISOs
+
+The `SELECT` button doubles as a `DOWNLOAD` button, the way Rufus's does: it
+fetches a Windows or UEFI Shell ISO straight from Microsoft. The version,
+release, edition and language choice and the Microsoft session flow are a
+Python port of [Fido](https://github.com/pbatard/Fido) (Pete Batard, GPLv3),
+the script Rufus itself runs. From the command line:
+
+    fubuki download --win "Windows 11" --lang "English (United States)" --arch x64 -o Win11.iso
+
 ## Credits and license
 
 Design and boot payloads derive from [Rufus](https://github.com/pbatard/rufus)

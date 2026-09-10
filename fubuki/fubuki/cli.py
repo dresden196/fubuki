@@ -5,8 +5,9 @@ import json
 import os
 import sys
 import threading
+import uuid
 
-from . import __version__, APP_NAME, devices, fs as fsmod, hashing, image, job as jobmod, unattend as ua
+from . import __version__, APP_NAME, devices, fs as fsmod, hashing, image, job as jobmod, unattend as ua, windl
 from .util import Emitter, CancelToken, UsbError, Cancelled, human_size
 
 from .i18n import _
@@ -140,6 +141,53 @@ def cmd_write(args):
         return 1
 
 
+def cmd_download(args):
+    """List Windows/UEFI Shell ISOs or download one (a Python port of Fido)."""
+    from . import windl
+    vlist = windl.versions()
+    if args.list or not args.win:
+        print("Windows versions (--win):")
+        for v in vlist:
+            print("  " + v["name"])
+        return 0
+    vi = next((v["index"] for v in vlist if args.win.lower() in v["name"].lower()), None)
+    if vi is None:
+        print("Unknown version. Use --list."); return 1
+    rels = windl.releases(vi)
+    ri = 0
+    if args.rel and args.rel.lower() != "latest":
+        ri = next((r["index"] for r in rels if r["label"].lower().startswith(args.rel.lower())), None)
+        if ri is None:
+            print("Releases:"); [print("  " + r["label"]) for r in rels]; return 1
+    eds = windl.editions(vi, ri)
+    ed = eds[0]
+    if args.edition:
+        ed = next((e for e in eds if args.edition.lower() in e["name"].lower()), None)
+        if ed is None:
+            print("Editions:"); [print("  " + e["name"]) for e in eds]; return 1
+    em = Emitter(json_mode=False, verbose=not args.quiet)
+    langs = windl.languages(vi, ed, log=em.log)
+    langlist = langs["languages"]
+    if args.lang and args.lang.lower() != "list":
+        lang = next((l for l in langlist if args.lang.lower() in l["display"].lower()), None)
+    else:
+        if args.lang:
+            print("Languages:"); [print("  " + l["display"]) for l in langlist]; return 0
+        lang = next((l for l in langlist if l["display"] == "English"), langlist[0])
+    if lang is None:
+        print("Unknown language. Use --lang List."); return 1
+    links = windl.download_links(vi, ri, ed, lang, log=em.log, sessions=langs["_sessions"])
+    link = links[0]
+    if args.arch:
+        link = next((l for l in links if l["arch"].lower() == args.arch.lower()), link)
+    if args.url_only:
+        print(link["url"]); return 0
+    dest = args.output or windl.filename_for(link["url"])
+    windl.download(link["url"], dest, emitter=em, cancel=CancelToken(), log=em.log)
+    print("Saved " + dest)
+    return 0
+
+
 # ----------------------------------------------------------------- serve
 
 class TaggedEmitter(Emitter):
@@ -181,6 +229,7 @@ def cmd_serve(args):
           "backend": backend_name, "can_write": can_write,
           "windows_options": list(ua.ALL_OPTIONS), "windows_defaults": sorted(ua.DEFAULT_OPTIONS)})
     current = {"thread": None, "cancel": None, "id": None}
+    dl_sessions = {}
     threads = []
 
     def worker(rid, fn):
@@ -263,6 +312,60 @@ def cmd_serve(args):
                 current["thread"] = t
                 threads.append(t)
                 t.start()
+            elif cmd == "win_versions":
+                send({"id": rid, "result": windl.versions()})
+            elif cmd == "win_releases":
+                send({"id": rid, "result": windl.releases(int(req.get("version", 0)))})
+            elif cmd == "win_editions":
+                send({"id": rid, "result": windl.editions(int(req.get("version", 0)), int(req.get("release", 0)),
+                                                          locale=req.get("locale", "en-US"))})
+            elif cmd == "win_languages":
+                em = TaggedEmitter(rid, out)
+                cancel = CancelToken()
+                current.update(cancel=cancel, id=rid)
+
+                def do_langs(em=em, cancel=cancel, r=req):
+                    ed = {"ids": r.get("edition_ids") or []}
+                    res = windl.languages(int(r.get("version", 0)), ed, locale=r.get("locale", "en-US"),
+                                          log=em.log, cancel=cancel)
+                    token = uuid.uuid4().hex
+                    dl_sessions[token] = res["_sessions"]
+                    send({"id": rid, "result": {"token": token, "languages": res["languages"]}})
+                    return None
+                t = threading.Thread(target=worker, args=(rid, do_langs), daemon=True)
+                threads.append(t)
+                t.start()
+            elif cmd == "win_links":
+                em = TaggedEmitter(rid, out)
+                cancel = CancelToken()
+
+                def do_links(em=em, cancel=cancel, r=req):
+                    sessions = dl_sessions.get(r.get("token"))
+                    ed = {"ids": r.get("edition_ids") or []}
+                    lang = {"data": r.get("language_data") or []}
+                    res = windl.download_links(int(r.get("version", 0)), int(r.get("release", 0)), ed, lang,
+                                               log=em.log, cancel=cancel, sessions=sessions)
+                    send({"id": rid, "result": res})
+                    return None
+                t = threading.Thread(target=worker, args=(rid, do_links), daemon=True)
+                threads.append(t)
+                t.start()
+            elif cmd == "win_download":
+                if current["thread"] is not None and current["thread"].is_alive():
+                    send({"id": rid, "error": "a job is already running"})
+                    continue
+                em = TaggedEmitter(rid, out)
+                cancel = CancelToken()
+                current.update(cancel=cancel, id=rid)
+
+                def do_dl(em=em, cancel=cancel, r=req):
+                    res = windl.download(r.get("url", ""), r.get("dest", ""), emitter=em, cancel=cancel, log=em.log)
+                    send({"id": rid, "event": "done", "ok": True, **res})
+                    return None
+                t = threading.Thread(target=worker, args=(rid, do_dl), daemon=True)
+                current["thread"] = t
+                threads.append(t)
+                t.start()
             elif cmd == "cancel":
                 if current["cancel"]:
                     current["cancel"].cancel()
@@ -331,6 +434,18 @@ def main(argv=None):
     s.add_argument("--yes", "-y", action="store_true", help="do not ask for confirmation")
     s.add_argument("--quiet", "-q", action="store_true")
     s.set_defaults(fn=cmd_write)
+
+    s = sub.add_parser("download", help="download a Windows or UEFI Shell ISO from Microsoft (Fido port)")
+    s.add_argument("--win", help='Windows version, e.g. "Windows 11"')
+    s.add_argument("--rel", help="release label prefix, or 'Latest'")
+    s.add_argument("--edition", help="edition name substring")
+    s.add_argument("--lang", help="language name substring, or 'List'")
+    s.add_argument("--arch", choices=("x86", "x64", "ARM64"), help="architecture")
+    s.add_argument("-o", "--output", help="save path (default: the ISO's own name)")
+    s.add_argument("--url-only", dest="url_only", action="store_true", help="print the link, do not download")
+    s.add_argument("--list", action="store_true", help="list Windows versions")
+    s.add_argument("--quiet", "-q", action="store_true")
+    s.set_defaults(fn=cmd_download)
 
     s = sub.add_parser("serve", help="JSON-lines service on stdin/stdout (used by the window)")
     s.set_defaults(fn=cmd_serve)
