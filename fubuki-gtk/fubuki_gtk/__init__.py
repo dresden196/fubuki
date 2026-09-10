@@ -1,4 +1,4 @@
 """Fubuki's GNOME window: GTK 4 and libadwaita over the fubuki engine."""
 
-__version__ = "0.2.2"
+__version__ = "0.2.3"
 APP_ID = "io.github.dresden196.fubuki.gtk"

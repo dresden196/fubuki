@@ -63,6 +63,11 @@ with `boot-real.sh` over USB passthrough):
 | Windows 11 24H2, NTFS via UEFI:NTFS, GPT | the Flatpak, as a plain user (polkit prompt) | | Setup, also under enforcing Secure Boot |
 | Ubuntu 24.04 Server, 2 GB persistence, MBR/FAT32 | `FUBUKI_BACKEND=udisks` as root | systemd | systemd |
 
+ISO downloader (0.2.3, a Fido port): `fubuki download` and both windows'
+Download dialogs fetched the live language list and a Windows 11 25H2 x64
+link from Microsoft, and downloaded the UEFI Shell 2.2 ISO from GitHub,
+which each window then adopted as its boot selection.
+
 Packages (0.2.2): `Fubuki-qt-*.AppImage` and `Fubuki-gtk-*.AppImage` start on
 a bare X server and spawn their bundled engine; the two Flatpaks
 (`io.github.dresden196.fubuki` on the KDE runtime, `.gtk` on the GNOME
