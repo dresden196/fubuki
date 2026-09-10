@@ -5,7 +5,7 @@
 # the engine reports and hands it a job. A second opinion here would be the
 # one people believed, and the one nobody tested.
 pkgname=fubuki-ui
-pkgver=0.2.0
+pkgver=0.2.1
 pkgrel=1
 pkgdesc="Fubuki bootable USB writer: the window"
 arch=('x86_64')

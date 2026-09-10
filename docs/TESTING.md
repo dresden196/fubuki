@@ -53,7 +53,15 @@ backend shares that code):
 | Windows 11 24H2, FAT32 with split install.swm | MBR | Setup | Setup |
 | Windows 11 24H2, NTFS via UEFI:NTFS | GPT | | Setup |
 | Windows XP SP3 setup media | MBR, FAT32 | text-mode Setup | |
-| Windows To Go, NTFS | MBR | see below | see below |
+| Windows To Go, NTFS | MBR | first boot | first boot |
+
+Real hardware through the **udisks2 backend** (USB DISK 3.0, 31 GB, booted
+with `boot-real.sh` over USB passthrough):
+
+| Media | Written by | BIOS | UEFI |
+|---|---|---|---|
+| Windows 11 24H2, NTFS via UEFI:NTFS, GPT | the Flatpak, as a plain user (polkit prompt) | | Setup, also under enforcing Secure Boot |
+| Ubuntu 24.04 Server, 2 GB persistence, MBR/FAT32 | `FUBUKI_BACKEND=udisks` as root | systemd | systemd |
 
 Known limitation, same as Rufus: a Linux ISO written to **exFAT** reaches
 its own GRUB through UEFI:NTFS but the distribution's signed GRUB has no

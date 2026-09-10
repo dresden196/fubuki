@@ -1,7 +1,7 @@
 # Maintainer: Dresden Wildey <dresden196@gmail.com>
 pkgname=fubuki-ui
 _base=fubuki
-pkgver=0.2.0
+pkgver=0.2.1
 pkgrel=1
 pkgdesc="Bootable USB writer in the spirit of Rufus: the KDE window"
 arch=('x86_64')
